@@ -266,7 +266,6 @@ lemma addAgentEqualsSucc {n : ℕ} :
       simp_all
     case mpr =>
       have h : x_1 = 0 := by
-        rw [← Nat.one_eq_succ_zero] at x_1
         ext
         simp_all only [Fin.coe_fin_one, Fin.isValue]
       rw [h]
@@ -382,17 +381,8 @@ lemma addAgentMakeCallCommute {n : Nat} (c : Call n) (someState : GossipState n)
   all_goals
     simp_all [addAgent]
   all_goals
-    cases em (y = Fin.last n)
-  all_goals
-    simp_all [makeCall, Fin.lastCases, Fin.reverseInduction]
-  · have : b = a := by
-      rw [← Fin.castSucc_inj]
-      rename_i h _ _
-      exact h
-    simp_all
+    cases em (y = Fin.last n) <;> simp_all [makeCall, Fin.lastCases, Fin.reverseInduction]
   · aesop
-  · aesop
-
 
 -- addAgent and makeCalls commute if the call sequence doesn't contain the new agent.
 lemma addAgentMakeCallsCommute {n : Nat} (σ : List (Call n)) (someState : GossipState n):
@@ -578,10 +568,8 @@ lemma twoSecretsSuccSingle {n : Nat} (s : GossipState (Nat.succ (n + 4))) (a b :
           · rename_i k_c2
             rw [if_pos k_c2] at k_knows_a
             rw [if_neg k_not_c1] at k_knows_a
-            · rename_i h
-              cases k_knows_a
-              · rename_i h
-                left
+            · rcases k_knows_a with h | _
+              · left
                 apply IH k h
               · aesop
           · rename_i k_not_c2
@@ -641,7 +629,8 @@ lemma lemma_1 {k : Nat} (seq : List (Call (k + 4))) (IH : allExpert (makeCalls (
       simp_all only [le_add_iff_nonneg_left, zero_le, Nat.cast_zero]
       aesop
     · intro i _
-      simp_all only [Nat.cast_zero, Fin.castSucc_zero, zero_fin_old, initial_call, zero_fin]
+      simp_all only [Nat.succ_eq_add_one, new_state, expandedSeq]
+      apply h'
 
 
   -- New_state contains more gossip than temp_state.
@@ -693,6 +682,7 @@ lemma lemma_3 {k : Nat} (seq : List (Call (k + 4))) (IH : allExpert (makeCalls (
     simp [temp_state] at h1
     exact h1 l
 
+set_option maxHeartbeats 1000000
 
 -- Main lemma for the inductive step.
 lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))):
@@ -794,10 +784,9 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))):
             constructor
             · cases i using Fin.lastCases
               case last =>
-                aesop
+                simp_all
               case cast _ i =>
-                simp [initial_call, makeCall, addAgent, initialState]
-                aesop
+                simp_all [makeCall, addAgent, initialState, zero_fin, Fin.lastCases, Fin.reverseInduction]
             · cases i using Fin.lastCases
               case last =>
                 aesop
@@ -814,7 +803,6 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))):
             rw [if_neg]
             · right
               simp [addAgent, initialState, Fin.lastCases, Fin.reverseInduction]
-              aesop
             · have less : 1 < Fin.last (k + 4) := by
                 apply Fin.one_lt_last
               aesop
@@ -824,8 +812,9 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))):
               have know_all_but_last : ∀ (i : Fin (k + 4)), ∀ (j : Fin (k + 4)), makeCalls (addAgent (initialState (k + 4))) (expandCalls seq) i.castSucc j.castSucc := by
                 intro i j
                 rw [addAgentReplaceable]
-                simp [addAgent]
-                aesop
+                simp_all only [Nat.succ_eq_add_one, List.cons_append, List.nil_append, ne_eq,
+                  addAgent, beq_iff_eq, Bool.false_eq_true, Fin.lastCases_castSucc]
+                apply IH
               have weaker : moreGossip (makeCalls (addAgent (initialState (k + 4))) (expandCalls seq)) (makeCalls (makeCall (addAgent (initialState (k + 4))) initial_call) (expandCalls seq)) := by
                 apply makeCallsIncreasesGossip
                 apply makeCallMakesGossip
@@ -839,10 +828,7 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))):
               apply weaker
               simp_all only [makeCall, addAgent, initialState]
               rw [if_neg]
-              · simp [succ_fin, zero_fin]
-                right
-                simp [Fin.lastCases, Fin.reverseInduction]
-                aesop
+              · simp_all [succ_fin, zero_fin, Fin.lastCases, Fin.reverseInduction]
               · have less : 1 < Fin.last (k + 4) := by
                   apply Fin.one_lt_last
                 aesop
