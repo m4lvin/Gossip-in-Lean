@@ -1,7 +1,6 @@
 -- Evaluation.lean
 --
--- Author:      Timo Doherty
--- Course:      Graduation Project Informatica
+-- Authors: Timo Doherty, Malvin Gattinger
 --
 -- Description:
 -- - This file contains the evaluation of the gossip representation contained in Gossip/GossipSufficient.lean.
@@ -10,7 +9,7 @@
 -- - Using manual evaluation to verify the gossip state after some sequence of calls.
 
 
-import Gossip.GossipSufficient
+import Gossip.Sufficient
 
 
 -- Calling shares your own secret with the other agent.
@@ -27,8 +26,7 @@ lemma addAgentOldOld {s : GossipState n} {i j : Fin n} :
 -- Old agents don't know the secrets of the new agents.
 lemma addAgentOldNew {s : GossipState n} {i : Fin n} :
     ¬ addAgent s i.castSucc (Fin.last n) := by
-    simp only [addAgent, beq_self_eq_true, Fin.lastCases_last, Fin.lastCases_castSucc,
-      not_false_eq_true]
+    simp [addAgent]
 
 
 -- New agents don't know the secrets of the old agents.
@@ -52,7 +50,7 @@ lemma addAgentNewNew {s : GossipState n} :
 lemma persistsCallBefore (n : ℕ) (σ : List (Call n)) (i j k l: Fin n) :
   (makeCalls (initialState n) σ) i j → (makeCalls (makeCall (initialState n) (k, l)) σ) i j := by
   intro h
-  apply makeCalls_increases_gossip
+  apply makeCallsIncreasesGossip
   · exact makeCallMakesGossip (initialState n) (k, l)
   · exact h
 
@@ -91,7 +89,8 @@ lemma intiallyNoSecrets (n : ℕ) (i j : Fin n) : i ≠ j → ¬ (initialState n
 def calls : List (Call 4) := [(0, 1), (1, 2), (2, 3), (3, 0)]
 def calls_big : List (Call 10) := [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 0)]
 
-#eval showState (makeCall (initialState 4) (0, 1))                          -- Correct
-#eval showState (makeCall (makeCall (initialState 4) (0, 1)) (1, 2))        -- Correct
-#eval showState (makeCalls (initialState 4) calls)                          -- Correct, 1 never learns the secret of 3
-#eval showState (makeCalls (initialState 10) calls_big)                     -- Correct
+-- TODO: turn this into a proper test suite
+-- #eval showState (makeCall (initialState 4) (0, 1))                          -- Correct
+-- #eval showState (makeCall (makeCall (initialState 4) (0, 1)) (1, 2))        -- Correct
+-- #eval showState (makeCalls (initialState 4) calls)                          -- Correct, 1 never learns the secret of 3
+-- #eval showState (makeCalls (initialState 10) calls_big)                     -- Correct

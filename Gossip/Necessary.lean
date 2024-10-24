@@ -1,7 +1,6 @@
--- GossipNecessary.lean
+-- Necessary.lean
 --
--- Author:      Timo Doherty
--- Course:      Graduation Project Informatica
+-- Authors: Timo Doherty, Malvin Gattinger
 --
 -- Description:
 -- - This file implements the groundwork for the proof that 2n-4 calls are required
@@ -9,7 +8,7 @@
 -- that of Baker and Shostak's approach `Gossips and telephones`.
 
 
-import Gossip.GossipSufficient
+import Gossip.Sufficient
 import Mathlib.Data.List.Indexes
 import Mathlib.Data.List.Basic
 
