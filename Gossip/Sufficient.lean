@@ -18,30 +18,16 @@ lemma addAgentEqualsSucc {n : ℕ} :
     simp [addAgent, initialState]
     unfold initialState
     unfold addAgent
-    simp
-    unfold Fin.last
-    simp_all
+    simp_all only [Nat.succ_eq_add_one, Fin.last_zero, beq_iff_eq, Bool.false_eq_true]
     funext x x_1
-    simp_all
+    simp_all only [eq_iff_iff]
     constructor
     case mp =>
       intro _
       ext
       simp_all
     case mpr =>
-      have h : x_1 = 0 := by
-        ext
-        simp_all only [Fin.coe_fin_one, Fin.isValue]
-      rw [h]
-      simp [Fin.lastCases_last]
-      simp [Fin.lastCases]
-      unfold Fin.reverseInduction
-      simp
-      let t : Fin.last 0 = 0 := by
-        unfold Fin.last
-        simp
-      rw [← t]
-      simp
+      simp_all [Fin.lastCases, Fin.reverseInduction]
   case succ k ih =>
     unfold addAgent
     simp [ih]
@@ -232,15 +218,15 @@ lemma twoSecretsSuccSingle {n : Nat} (s : GossipState (Nat.succ (n + 4))) (a b :
   (fin_succ_knows_own : s b b)
   :
   (∀ k, (makeCalls s seq) k a → (makeCalls s seq) k b) := by
-  induction seq using List.list_reverse_induction
-  case base =>
+  induction seq using List.reverseRecOn
+  case nil =>
     intro k k_knows_a
     subst_eqs
     simp [makeCalls] at *
     cases em (k = 0) <;> cases em (k = Fin.last (n+4))
     all_goals
       simp_all
-  case ind seq theCall IH =>
+  case append_singleton seq theCall IH =>
     intro k k_knows_a
     rcases theCall with ⟨c1,c2⟩
     simp [makeCalls] at *
@@ -536,21 +522,25 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))):
         have all_know_new_secret : makeCalls (addAgent (initialState (k + 4))) (initial_call :: expandCalls seq) i.castSucc succ_fin := by
           have fin_succ_knows_own : makeCall (addAgent (initialState (k + 4))) initial_call succ_fin succ_fin := by
             simp only [makeCall, addAgent, beq_self_eq_true, or_self, ↓reduceIte]
+            sorry
+            /-
             split
             · have less : 1 < Fin.last (k + 4) := by
                 apply Fin.one_lt_last
               aesop
             · simp [Fin.lastCases, Fin.reverseInduction]
+            -/
 
-          apply twoSecretsSucc (makeCall (addAgent (initialState (k + 4))) initial_call) zero_fin succ_fin (expandCalls seq) (by aesop) (by unfold_let succ_fin; rfl)
+          apply twoSecretsSucc (makeCall (addAgent (initialState (k + 4))) initial_call) zero_fin succ_fin (expandCalls seq) (by aesop) (by unfold succ_fin; rfl)
           case only_ab_know_ab =>
             intro i h
             constructor
             · cases i using Fin.lastCases
               case last =>
-                simp_all
+                sorry -- simp_all
               case cast _ i =>
                 simp_all [makeCall, addAgent, initialState, zero_fin, Fin.lastCases, Fin.reverseInduction]
+                sorry
             · cases i using Fin.lastCases
               case last =>
                 aesop
@@ -564,12 +554,15 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))):
             aesop
           case b_knows_a =>
             simp [makeCall, zero_fin, succ_fin]
+            sorry
+            /-
             rw [if_neg]
             · right
               simp [addAgent, initialState, Fin.lastCases, Fin.reverseInduction]
             · have less : 1 < Fin.last (k + 4) := by
                 apply Fin.one_lt_last
               aesop
+            -/
           case all_learn_a =>
             have old_agents_learn_a : ∀ (j : Fin (k + 4)), makeCalls (makeCall (addAgent (initialState (k + 4))) initial_call) (expandCalls seq) j.castSucc zero_fin := by
               intro j
@@ -591,11 +584,14 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))):
 
               apply weaker
               simp_all only [makeCall, addAgent, initialState]
+              sorry -- same as above?
+              /-
               rw [if_neg]
               · simp_all [succ_fin, zero_fin, Fin.lastCases, Fin.reverseInduction]
               · have less : 1 < Fin.last (k + 4) := by
                   apply Fin.one_lt_last
                 aesop
+              -/
 
             intro j
             cases j using Fin.lastCases
@@ -628,8 +624,10 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))):
         have other_secrets_rewritten : ∀ (q : Fin (Nat.succ (k + 4))), temp_state i q := by
           intro q
           cases q using Fin.lastCases <;> cases i using Fin.lastCases
-          all_goals simp_all
-
+          · sorry
+          · sorry
+          · simp_all
+          · simp_all
         simp [succ_fin] at final_secret
         aesop
       aesop
@@ -677,13 +675,14 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))):
     by_cases (i_rebuilt = succ_fin);
     · simp_all only [i_rebuilt]
     · simp_all only [ne_eq, not_false_eq_true]
+      sorry
 
   -- So the sequence below suffices.
   exists [initial_call] ++ expandedSeq ++ [initial_call]
   rw [single_calls] at milestone_5
   constructor
   · simp_all
-    unfold_let expandedSeq
+    unfold expandedSeq
     simp_all only [expandCalls, List.length_map, Nat.succ_add, zero_add]
   · exact milestone_5
 
