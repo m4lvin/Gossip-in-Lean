@@ -369,10 +369,7 @@ lemma lemma_2 {k : Nat} (seq : List (Call (k + 4))) :
   have l : moreGossip (makeCall (addAgent (initialState (k + 4))) initial_call) (makeCalls ((makeCall (addAgent (initialState (k + 4))) initial_call)) (expandCalls seq)) := by
     apply callsIncreaseGossip
   apply l
-  simp [initial_call, makeCall]
-  right
-  simp [addAgent, initialState]
-  simp_all only [Fin.lastCases_last, new_state, zero_fin, succ_fin]
+  simp [initial_call, makeCall, addAgent, initialState, succ_fin]
 
 /-- Combining lemma_1 and lemma_2 to show that the first agent is an expert. -/
 lemma lemma_3 {k : Nat} (seq : List (Call (k + 4))) (IH : allExpert (makeCalls (initialState (k + 4)) seq)) :
@@ -475,30 +472,23 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
         -- All agents get to learn the new agent's secret.
         have all_know_new_secret : makeCalls (addAgent (initialState (k + 4))) (initial_call :: expandCalls seq) i.castSucc succ_fin := by
           have fin_succ_knows_own : makeCall (addAgent (initialState (k + 4))) initial_call succ_fin succ_fin := by
-            simp only [makeCall, addAgent, beq_self_eq_true, or_self, ↓reduceIte]
-            sorry
-            /-
-            split
-            · have less : 1 < Fin.last (k + 4) := by
-                apply Fin.one_lt_last
-              aesop
-            · simp [Fin.lastCases, Fin.reverseInduction]
-            -/
-
+            rcases initial_call with ⟨a,b⟩ -- agents in call
+            simp only [makeCall, Nat.succ_eq_add_one, addAgent, beq_iff_eq, Bool.false_eq_true,
+              expandedSeq]
+            split <;> aesop
           apply twoSecretsSucc (makeCall (addAgent (initialState (k + 4))) initial_call) zero_fin succ_fin (expandCalls seq) (by aesop) (by unfold succ_fin; rfl)
           case only_ab_know_ab =>
-            intro i h
+            intro i ⟨h1,h2⟩
             constructor
             · cases i using Fin.lastCases
               case last =>
-                sorry -- simp_all
-              case cast _ i =>
-                simp_all [makeCall, addAgent, initialState, zero_fin, Fin.lastCases, Fin.reverseInduction]
-                sorry
+                simp_all [makeCall, addAgent, initial_call, initialState, zero_fin, Fin.lastCases]
+              case cast i =>
+                simp_all [makeCall, addAgent, initialState, zero_fin, Fin.lastCases, Fin.reverseInduction, initial_call]
             · cases i using Fin.lastCases
               case last =>
                 aesop
-              case cast _ i =>
+              case cast i =>
                 simp [initial_call, makeCall, addAgent, initialState]
                 aesop
           case a_knows_b =>
@@ -507,16 +497,9 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
             simp [addAgent, initialState]
             aesop
           case b_knows_a =>
-            simp [makeCall, zero_fin, succ_fin]
-            sorry
-            /-
-            rw [if_neg]
-            · right
-              simp [addAgent, initialState, Fin.lastCases, Fin.reverseInduction]
-            · have less : 1 < Fin.last (k + 4) := by
-                apply Fin.one_lt_last
-              aesop
-            -/
+            simp [makeCall, zero_fin, succ_fin, initial_call]
+            right
+            simp [addAgent, initialState, Fin.lastCases, Fin.reverseInduction]
           case all_learn_a =>
             have old_agents_learn_a : ∀ (j : Fin (k + 4)), makeCalls (makeCall (addAgent (initialState (k + 4))) initial_call) (expandCalls seq) j.castSucc zero_fin := by
               intro j
@@ -533,19 +516,18 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
               exact know_all_but_last j zero_fin
 
             have new_agent_learns_a : makeCalls (makeCall (addAgent (initialState (k + 4))) initial_call) (expandCalls seq) succ_fin zero_fin := by
-              have weaker : moreGossip (makeCall (addAgent (initialState (k + 4))) initial_call) (makeCalls (makeCall (addAgent (initialState (k + 4))) initial_call) (expandCalls seq)) := by
-                apply callsIncreaseGossip
-
+              have weaker : moreGossip
+                (makeCall (addAgent (initialState (k + 4))) initial_call)
+                (makeCalls (makeCall (addAgent (initialState (k + 4))) initial_call) (expandCalls seq))
+                  := by apply callsIncreaseGossip
               apply weaker
-              simp_all only [makeCall, addAgent, initialState]
-              sorry -- same as above?
-              /-
+              unfold initial_call
+              simp only [makeCall, addAgent, initialState]
               rw [if_neg]
               · simp_all [succ_fin, zero_fin, Fin.lastCases, Fin.reverseInduction]
               · have less : 1 < Fin.last (k + 4) := by
                   apply Fin.one_lt_last
                 aesop
-              -/
 
             intro j
             cases j using Fin.lastCases
@@ -553,8 +535,7 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
             case cast j =>
               rw [makeCalls_cons] at oldLearnOld
               exact old_agents_learn_a j
-          case fin_succ_knows_own =>
-            exact fin_succ_knows_own
+          exact fin_succ_knows_own
 
         cases i using Fin.lastCases
         case last => exfalso; tauto
