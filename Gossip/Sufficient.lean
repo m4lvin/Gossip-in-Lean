@@ -392,9 +392,7 @@ lemma lemma_3 {k : Nat} (seq : List (Call (k + 4))) (IH : allExpert (makeCalls (
     simp [temp_state] at h1
     exact h1 l
 
-set_option maxHeartbeats 1000000
-
--- Main lemma for the inductive step.
+/-- Main lemma for the inductive step. -/
 lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
     allExpert (makeCalls (initialState (k + 4)) seq) →
     ∃ seq', seq'.length = 2 + seq.length ∧ allExpert (makeCalls (initialState (Nat.succ k + 4)) seq') := by
@@ -559,9 +557,13 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
     apply subgoal_2
     simp_all only [not_false_eq_true]
 
-  -- putting milestone_3 and milestone_4 together, we get that everyone is an expert.
-  have milestone_5 : allExpert new_state := by
-
+  -- HERE we choose the new sequence:
+  use [initial_call] ++ expandedSeq ++ [initial_call]
+  constructor
+  · simp [expandedSeq, expandCalls]
+    omega
+  · -- milestone_5
+    -- putting milestone_3 and milestone_4 together, we get that everyone is an expert.
     have new_becomes_expert : isExpert new_state succ_fin := by
       have h : isExpert temp_state zero_fin := by
         unfold isExpert
@@ -579,25 +581,10 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
       rw [state_equiv]
       apply expertMakesExpert
       exact h
-
-    unfold allExpert
     intro i
-    cases i
-    rename_i val isLt
-    let i_rebuilt : Fin (Nat.succ (k + 4)) := ⟨val, isLt⟩
-    by_cases (i_rebuilt = succ_fin);
-    · simp_all only [i_rebuilt]
-    · simp_all only [ne_eq, not_false_eq_true]
-      aesop
-
-  -- So the sequence below suffices.
-  use [initial_call] ++ expandedSeq ++ [initial_call]
-  rw [single_calls] at milestone_5
-  constructor
-  · simp_all
-    unfold expandedSeq
-    simp_all only [expandCalls, List.length_map, Nat.succ_add, zero_add]
-  · exact milestone_5
+    by_cases h : (i = succ_fin)
+    · convert new_becomes_expert; simp_all
+    · convert milestone_4 i h; simp_all
 
 /-- Main theorem: for n ≥ 4 agents there exists a sequence of calls that makes everyone an expert. -/
 theorem sufficiency (n : Nat) : (n ≥ 4) → ∃ (seq : List (Call n)), seq.length = (2 * n - 4) ∧ allExpert (makeCalls (initialState n) seq) :=
