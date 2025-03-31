@@ -12,7 +12,7 @@ import Mathlib.Tactic.Linarith
 def GossipState (n : Nat) : Type := Fin n → Fin n → Prop
 
 -- A Call is a pair of agents.
-def Call (n : Nat): Type := Fin n × Fin n
+abbrev Call (n : Nat): Type := Fin n × Fin n
 
 -- Generates the initial state where agents only know their own secret.
 def initialState (n : Nat) : GossipState n := fun i j => i = j
@@ -80,14 +80,8 @@ def addAgent (s : GossipState n) : GossipState (n.succ) :=
                                                  (fun b => s i b)
                                                 b) a
 
--- Same call contents, but different type to match the larger state.
-def expandCall {n : ℕ} (c : Call n) : Call (Nat.succ n) :=
-  match c with
-    | (i, j) => (i.castSucc, j.castSucc)
-
--- Expands a list of calls to the larger state.
-def expandCalls {n : ℕ} (cs : List (Call n)) : List (Call (Nat.succ n)) :=
-  cs.map expandCall
+/-- A call among the n agents is also a call among the n+1 agents. -/
+instance instCoeCallSucc : Coe (Call n) (Call n.succ) := ⟨fun ⟨i, j⟩ => (i.castSucc, j.castSucc)⟩
 
 -- Two states are identical if they contain the same gossip.
 def stateEquivalence : GossipState n → GossipState n → Prop :=
@@ -132,7 +126,6 @@ lemma makeCall_increases_gossip (s1 s2 : GossipState n) (c : Call n) :
     simp_all only
     split
     simp_all only
-    split
     rename_i h_1
     subst h_1
     simp_all only [↓reduceIte]
@@ -182,24 +175,7 @@ lemma makeCallMakesGossip (s : GossipState n) (c : Call n) :
   unfold moreGossip
   intro a b h
   simp [makeCall]
-  simp_all only
-  split
-  simp_all only
-  split
-  rename_i h_1
-  subst h_1
-  simp_all only [true_or]
-  rename_i c f g i j k
-  if hyp: a = j then
-    rw [hyp, if_pos]
-    subst hyp
-    simp_all only [true_or]
-    rfl
-  else
-    rw [if_neg]
-    simp_all only
-    exact hyp
-
+  split <;> aesop
 
 -- Adding calls to a state don't decrease the amount of gossip.
 lemma callsIncreaseGossip (s : GossipState n) (cs : List (Call n)) :
