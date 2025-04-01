@@ -208,12 +208,6 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
     simp [new_state]
     apply singleMakeCalls
 
-  -- The first agent learns the secret of the new agent.
-  have milestone_2 : temp_state zero_fin succ_fin := lemma_2 seq
-
-  -- Thus the first agent is an expert.
-  have milestone_3 : isExpert temp_state zero_fin := lemma_3 seq IH
-
   -- Putting milestone_1 and milestone_2 together, we get that all but the last agents are experts
   have milestone_4 : ∀ i, i ≠ succ_fin → isExpert new_state i := by
     -- The goal is true for temp_state.
@@ -255,18 +249,14 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
         -- prepare for the lemma.
         have agent_0_knows_both : temp_state zero_fin succ_fin ∧ temp_state zero_fin zero_fin := by
           constructor
-          · apply milestone_3
-          · apply milestone_3
-        clear milestone_3
+          · apply lemma_3 seq IH
+          · apply lemma_3 seq IH
 
-        -- All agents get to learn the new agent's secret.
-        have all_know_new_secret : makeCalls (addAgent (initialState (k + 4))) (initial_call :: seq) i.castSucc succ_fin := by
-          have fin_succ_knows_own : makeCall (addAgent (initialState (k + 4))) initial_call succ_fin succ_fin := by
-            rcases initial_call with ⟨a,b⟩ -- agents in call
-            simp only [makeCall, Nat.succ_eq_add_one, addAgent, beq_iff_eq, Bool.false_eq_true,
-              expandedSeq]
-            split <;> aesop
-          apply twoSecretsSucc (makeCall (addAgent (initialState (k + 4))) initial_call) zero_fin succ_fin seq (by aesop) (by unfold succ_fin; rfl)
+        cases i using Fin.lastCases
+        case last => exfalso; tauto
+        case cast i =>
+          -- All agents get to learn the new agent's secret.
+          apply twoSecretsSucc _ _ succ_fin seq (by aesop) (by unfold succ_fin; rfl)
           case only_ab_know_ab =>
             intro i ⟨h1,h2⟩
             constructor
@@ -325,12 +315,10 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
             case cast j =>
               rw [makeCalls_cons] at oldLearnOld
               exact old_agents_learn_a j
-          exact fin_succ_knows_own
 
-        cases i using Fin.lastCases
-        case last => exfalso; tauto
-        case cast i =>
-          exact all_know_new_secret
+          rcases initial_call with ⟨a,b⟩ -- agents in call
+          simp only [makeCall, Nat.succ_eq_add_one, addAgent, beq_iff_eq, Bool.false_eq_true, expandedSeq]
+          split <;> aesop
 
       -- Putting them together in the right format.
       have final : ∀ (j : Fin (Nat.succ (k + 4))), temp_state i j := by
@@ -357,7 +345,6 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
   · -- milestone_5
     -- putting milestone_3 and milestone_4 together, we get that everyone is an expert.
     have new_becomes_expert : isExpert new_state succ_fin := by
-      have h : isExpert temp_state zero_fin := by aesop
 
       have state_equiv : new_state = makeCall temp_state initial_call := by
         rw [single_calls]
@@ -367,7 +354,8 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
 
       rw [state_equiv]
       apply expertMakesExpert
-      exact h
+      apply lemma_3
+      simp_all
     intro i
     by_cases h : (i = succ_fin)
     · convert new_becomes_expert; simp_all
