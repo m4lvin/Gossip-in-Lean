@@ -1,3 +1,4 @@
+import Mathlib
 -- Necessary.lean
 --
 -- Authors: Timo Doherty, Malvin Gattinger
@@ -27,6 +28,51 @@ import Gossip.Sufficient
 variable {n : Nat}
 
 abbrev after (σ : List (Call n)) := makeCalls (initialState n) σ
+
+/-- Helper about properties of `Nat`s. Move to helper file. -/
+lemma exists_to_minimal_exists (φ : Nat → Prop):
+    (∃ k, φ k) → (∃ m, φ m ∧ ∀ n < m, ¬ φ n) := by
+  intro ⟨k, h_k⟩
+  induction k using Nat.strong_induction_on
+  case h k IH =>
+    cases k
+    case zero =>
+      use 0
+      constructor
+      · assumption
+      · simp
+    case succ k =>
+      by_cases φ k
+      case pos h =>
+        exact IH k (by simp) h
+      case neg h =>
+        by_cases ∃ l < k, φ l
+        case pos hl =>
+          rcases hl with ⟨l, l_lt_, phi_l⟩
+          exact IH l (by linarith) phi_l
+        case neg hl =>
+          use k + 1
+          constructor
+          · exact h_k
+          · intro j j_lt_k_succ
+            rw [@Nat.lt_add_one_iff_lt_or_eq] at j_lt_k_succ
+            cases j_lt_k_succ
+            · simp at hl
+              apply hl
+              assumption
+            · convert h
+
+/-- f(n) = k -/
+def is_f n k :=
+  ∃ σ : List (Call n), allExpert (after σ)
+  ∧ σ.length = k
+  ∧ ¬ ∃ σ' : List (Call n), allExpert (after σ') ∧ σ'.length < k
+
+theorem bla : ∀ n, is_f n (2*n -4) := by
+  by_contra hyp
+  rw [not_forall] at hyp
+  have := exists_to_minimal_exists _ hyp
+  sorry
 
 /-- Given a sequence of length 2n-4 or less that makes all agents experts,
 before each of the calls of the sequence, the agents in that call do
