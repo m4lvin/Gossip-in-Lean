@@ -72,7 +72,15 @@ theorem bla : ∀ n, is_f n (2*n -4) := by
   by_contra hyp
   rw [not_forall] at hyp
   have := exists_to_minimal_exists _ hyp
-  sorry
+  simp at this
+  rcases hyp with ⟨x, hx⟩
+  rcases this with ⟨m, hm, h_min⟩
+  by_cases h : x < m
+  case pos =>
+    sorry
+  case neg =>
+    sorry
+
 
 /-- Given a sequence of length 2n-4 or less that makes all agents experts,
 before each of the calls of the sequence, the agents in that call do
