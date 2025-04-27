@@ -77,7 +77,8 @@ theorem bla : ∀ n, is_f n (2*n -4) := by
   rcases this with ⟨m, hm, h_min⟩
   by_cases h : x < m
   case pos =>
-    sorry
+    have := h_min _ h
+    exact hx this
   case neg =>
     sorry
 
