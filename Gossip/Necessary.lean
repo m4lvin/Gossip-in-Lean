@@ -80,7 +80,14 @@ theorem bla : ∀ n, is_f n (2*n -4) := by
     have := h_min _ h
     exact hx this
   case neg =>
-    sorry
+    simp at h
+    rcases lt_or_eq_of_le h with h_less | h_eq
+    case inl =>
+      -- have := h_min _ h_less
+      sorry
+    case inr =>
+      -- have := hx _ h_eq
+      sorry
 
 
 /-- Given a sequence of length 2n-4 or less that makes all agents experts,
