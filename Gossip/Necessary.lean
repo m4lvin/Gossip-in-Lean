@@ -68,11 +68,23 @@ def is_f n k :=
   ∧ σ.length = k
   ∧ ¬ ∃ σ' : List (Call n), allExpert (after σ') ∧ σ'.length < k
 
+def is_f_leq n k :=
+  ∃ σ : List (Call n), allExpert (after σ)
+  ∧ σ.length ≤  k
+
 /-- Nobody hears their own sequence. -/
 def noHo (σ : List (Call n)) : Prop :=
   ∀ i : Fin σ.length,
       ¬ (after (σ.take (i - 1))) σ[i].fst σ[i].snd
     ∧ ¬ (after (σ.take (i - 1))) σ[i].snd σ[i].fst
+
+
+def phi (n : Nat) : Prop :=
+  n > 4 ∧ is_f_leq n (2*n - 5)
+
+def min_m :=
+  ∃ m : Nat, phi m
+  ∧ ∀ n > m, ¬ phi n
 
 /-- Given a sequence of length 2n-4 or less that makes all agents experts,
 before each of the calls of the sequence, the agents in that call do
@@ -80,11 +92,14 @@ not know each other's secrets. -/
 lemma noHo_of_minimal_expert_sequence (σ : List (Call n))
     (h : σ.length ≤ 2 * n - 5)
     (hExp : allExpert (after σ))
+    (h_min : min_m)
     -- FIXME: needs extra assumptions about minimality
     : noHo σ := by
+    -- have : exists_to_minimal_exists phi
   -- rearranging argument
-  sorry
+    sorry
 
+/--/
 theorem bla : ∀ n, is_f n (2*n -4) := by
   by_contra hyp
   rw [not_forall] at hyp
@@ -105,7 +120,7 @@ theorem bla : ∀ n, is_f n (2*n -4) := by
     case inr =>
       -- have := hx _ h_eq
       sorry
-
+-/
 /-
 /-- For n ≥ 4 agents, any sequence of 2n-5 or fewer calls cannot make everyone experts. -/
 theorem low_not_sufficient (h : n ≥ 4) (σ : List (Call n))
