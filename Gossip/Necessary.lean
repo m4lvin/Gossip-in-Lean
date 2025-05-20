@@ -29,7 +29,10 @@ variable {n : Nat}
 
 abbrev after (σ : List (Call n)) := makeCalls (initialState n) σ
 
-/-- Helper about properties of `Nat`s. Move to helper file. -/
+/-! ## Helper functions about properties of `Nat`s. -/
+
+/-- Suppose there exists a natural number satisfying φ.
+Then there exists a *minimal* natural number that satisfies φ. -/
 lemma exists_to_minimal_exists (φ : Nat → Prop):
     (∃ k, φ k) → (∃ m, φ m ∧ ∀ n < m, ¬ φ n) := by
   intro ⟨k, h_k⟩
@@ -39,7 +42,7 @@ lemma exists_to_minimal_exists (φ : Nat → Prop):
     case zero =>
       use 0
       constructor
-      · assumption
+      · exact h_k
       · simp
     case succ k =>
       by_cases φ k
@@ -72,25 +75,24 @@ def is_f_leq n k :=
   ∃ σ : List (Call n), allExpert (after σ)
   ∧ σ.length ≤  k
 
-/-- Nobody hears their own sequence. -/
+/-- Nobody hears their own secret in the given sequence, i.e. before each call
+in the sequence, the agents in that call do not know each other's secrets. -/
 def noHo (σ : List (Call n)) : Prop :=
   ∀ i : Fin σ.length,
       ¬ (after (σ.take (i - 1))) σ[i].fst σ[i].snd
     ∧ ¬ (after (σ.take (i - 1))) σ[i].snd σ[i].fst
 
-
 def phi (n : Nat) : Prop :=
   n > 4 ∧ is_f_leq n (2*n - 5)
 
-def is_minimal (m: Nat) :=
+def is_minimal (m : Nat) :=
   phi m
-  ∧ ∀ n > m, ¬ phi n
+  ∧ ∀ n < m, ¬ phi n -- note: corrected > to be < here.
 
-/-- Given a sequence of length 2n-4 or less that makes all agents experts,
-before each of the calls of the sequence, the agents in that call do
-not know each other's secrets. -/
+/-- Given a sequence `σ` of length `2m-5` or less that makes all `m` agents experts,
+if `m` is minimal, then nobody hears their own secret in σ. -/
 lemma noHo_of_minimal_expert_sequence (σ : List (Call m))
-    (h : σ.length ≤ 2 * m - 5)
+    (σ_short : σ.length ≤ 2 * m - 5)
     (hExp : allExpert (after σ))
     (h_min : is_minimal m)
     : noHo σ := by
@@ -112,40 +114,26 @@ theorem helper {k n} (h : 4 ≤ n) : k ≤ 2 * n - 5 ↔ k < 2 * n - 4 := by
 theorem necessity :
     ∀ n > 4, ∀ σ : List (Call n), allExpert (after σ) → σ.length ≥ 2*n - 4 := by
   by_contra hyp
-  simp only [ge_iff_le, not_forall, not_le] at hyp
-  -- let φ n := ∃ (_ : 4 ≤ n), ∃ σ : List (Call n), ∃ (h : allExpert (after σ)), σ.length < 2 * n - 4
+  simp only [gt_iff_lt, ge_iff_le, not_forall, not_le] at hyp
+  -- FIXME later with newer lean: avoid `∃ _` proofs, `simp` does it but `simp only` does not.
+  -- let φ n := ∃ (_ : 4 < n), ∃ σ : List (Call n), ∃ (h : allExpert (after σ)), σ.length < 2 * n - 4
   have := exists_to_minimal_exists _ hyp
   rcases this with ⟨m, ⟨le_m, ⟨S, S_allExp, S_len_lt⟩⟩, m_is_minimal⟩
-
-  -- rw [← helper le_m] at S_len_lt
-
-  have noHo_S : noHo S := by
-    apply noHo_of_minimal_expert_sequence
-    -- TODO ;-)
-    · rw [@Nat.le_iff_lt_add_one]
+  rw [← helper (by linarith)] at S_len_lt
+  -- `m_is_minimal` is not yet exactly the right input for `noHo_of_minimal_expert_sequence`.
+  have is_minimal_m : is_minimal m := by
+    simp at m_is_minimal
+    unfold is_minimal phi is_f_leq
+    simp
+    constructor
+    · exact ⟨le_m, S, ⟨S_allExp, S_len_lt⟩⟩
+    · intro k k_lt_m four_lt_k
+      intro σ σ_AllExp
+      have := m_is_minimal k k_lt_m four_lt_k σ σ_AllExp
+      simp_rw [@Nat.le_iff_lt_add_one] at this
       omega
-    · assumption
-    · unfold is_minimal
-      unfold phi
-      constructor
-      · constructor
-        · assumption
-        · unfold is_f_leq
-          use S
-          constructor
-          · exact S_allExp
-          · rw [@Nat.le_iff_lt_add_one]
-            omega
-      · intro n n_gtm
-        rw [Mathlib.Tactic.PushNeg.not_and_or_eq]
-        right
-        unfold is_f_leq
-        push_neg
-        intro σ σ_AllExp
-        simp at m_is_minimal
-        -- Use m_is_minimal
-        sorry
-
+  -- Now we can use the lemma.
+  have noHo_S : noHo S := noHo_of_minimal_expert_sequence S S_len_lt S_allExp is_minimal_m
 
   -- TODO: define final and initial first
   -- have claim1 : sorry := sorry -- "all calls in S are final for both or neither"
