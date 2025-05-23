@@ -65,6 +65,38 @@ lemma exists_to_minimal_exists (φ : Nat → Prop):
               assumption
             · convert h
 
+/-- Nobody hears their own secret in the given sequence, i.e. before each call
+in the sequence, the agents in that call do not know each other's secrets. -/
+def noHo (σ : List (Call n)) : Prop :=
+  ∀ i : Fin σ.length,
+      ¬ (after (σ.take (i - 1))) σ[i].fst σ[i].snd
+    ∧ ¬ (after (σ.take (i - 1))) σ[i].snd σ[i].fst
+
+/-- Number of calls that k directly participates in. -/
+def v (S : List (Call m)) (k : Fin m) : Nat := sorry -- easy?
+
+/-- Among n agents, to make k an expert, we need at least n-1 calls. -/
+lemma exp_needs_n_min_one_calls (S : List (Call n))
+    (h : isExpert (after S) k)
+    : n - 1 < S.length := by
+  sorry
+
+/-- Among n agents, to make k an expert, we need at least n-1 calls. -/
+lemma known_needs_n_min_one_calls (S : List (Call n))
+    (h : allKnow (after S) k)
+    : n - 1 < S.length := by
+  sorry
+
+/-- Given a noHo sequence, to make k an expert and make everyone know k, we need this many calls. -/
+lemma noHo_exp_and_known_needs_many_calls (S : List (Call n))
+    (S_noHo : noHo S)
+    (k : Fin n)
+    (h : isExpert (after S) k)
+    (h2 : allKnow (after S) k)
+    : 2 * n - 2 - v S k ≤ S.length := by
+  -- use Lemma 6 "calls needed for both spreading and informing are those in v S k"
+  sorry
+
 /-- f(n) = k -/
 def is_f n k :=
   ∃ σ : List (Call n), allExpert (after σ)
@@ -74,13 +106,6 @@ def is_f n k :=
 def is_f_leq n k :=
   ∃ σ : List (Call n), allExpert (after σ)
   ∧ σ.length ≤  k
-
-/-- Nobody hears their own secret in the given sequence, i.e. before each call
-in the sequence, the agents in that call do not know each other's secrets. -/
-def noHo (σ : List (Call n)) : Prop :=
-  ∀ i : Fin σ.length,
-      ¬ (after (σ.take (i - 1))) σ[i].fst σ[i].snd
-    ∧ ¬ (after (σ.take (i - 1))) σ[i].snd σ[i].fst
 
 def phi (n : Nat) : Prop :=
   n > 4 ∧ is_f_leq n (2*n - 5)
@@ -139,8 +164,7 @@ theorem necessity :
   -- have claim1 : sorry := sorry -- "all calls in S are final for both or neither"
   -- have claim2 : sorry := sorry -- "all calls in S are initial for both or neither"
 
-  -- TODO: define graph
-
+  -- 1.3 Graph Building -- TODO
   let initPart : List (Call m) := sorry
   let midPart : List (Call m) := sorry
   let finalPart : List (Call m) := sorry
@@ -158,4 +182,23 @@ theorem necessity :
 
   have : midPart.length ≤ m - 5 := by sorry -- or was it flipped around?
 
-  sorry
+  -- number of calls that do not affet what k learns or who learns k
+  let c : (k : Fin m) → Nat := sorry -- hard?
+
+  -- Now we show "S.length > 2.5 * m".
+  have : 5 * m < 2 * S.length := by
+    have : ∀ k, 2 * m - 2 - v S k + c k ≤ 2 * m - 5 := by
+      sorry
+    have S_len_def : ∀ k, S.length = 2 * m - 2 - v S k + c k := by
+      intro k
+      have := noHo_exp_and_known_needs_many_calls S noHo_S k ?_ ?_
+      sorry -- need def of c first
+      · intro j; apply S_allExp
+      · intro j; apply S_allExp
+
+    have := S_len_def ⟨0, Nat.zero_lt_of_lt le_m⟩
+    rewrite [this]
+    sorry
+
+  -- contradiction :-)
+  omega

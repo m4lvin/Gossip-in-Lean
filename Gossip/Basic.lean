@@ -22,6 +22,9 @@ instance {n : ℕ} : DecidableRel (initialState n) := decEq
 -- Check if an agent is an expert.
 def isExpert (s : GossipState n) (i : Fin n): Prop := ∀ j, s i j
 
+/-- All other agents know the secret of this one. -/
+def allKnow (s : GossipState n) (i : Fin n) : Prop := ∀ j, s j i
+
 -- Instance that allows isExpert to evaluate on Decidable GossipStates.
 instance {s : GossipState n} [DecidableRel s] {i : Fin n} : Decidable (isExpert s i) :=
   Fintype.decidableForallFintype
