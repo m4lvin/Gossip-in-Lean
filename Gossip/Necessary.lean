@@ -73,7 +73,8 @@ def noHo (σ : List (Call n)) : Prop :=
     ∧ ¬ (after (σ.take (i - 1))) σ[i].snd σ[i].fst
 
 /-- Number of calls that k directly participates in. -/
-def v (S : List (Call m)) (k : Fin m) : Nat := sorry -- easy?
+def v (S : List (Call m)) (k : Fin m) : Nat := -- easy?
+  S.foldl (λ (counter c) => ite (c.fst = k ∨ c.snd = k) (counter + 1) counter) 0
 
 /-- Among n agents, to make k an expert, we need at least n-1 calls. -/
 lemma exp_needs_n_min_one_calls (S : List (Call n))
@@ -182,7 +183,7 @@ theorem necessity :
 
   have : midPart.length ≤ m - 5 := by sorry -- or was it flipped around?
 
-  -- number of calls that do not affet what k learns or who learns k
+  -- number of calls that do not affect what k learns or who learns k
   let c : (k : Fin m) → Nat := sorry -- hard?
 
   -- Now we show "S.length > 2.5 * m".
