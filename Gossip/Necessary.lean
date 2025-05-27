@@ -25,6 +25,8 @@ import Mathlib.Data.List.Basic
 
 import Gossip.Sufficient
 
+#print List.countP
+
 variable {n : Nat}
 
 abbrev after (σ : List (Call n)) := makeCalls (initialState n) σ
@@ -74,7 +76,10 @@ def noHo (σ : List (Call n)) : Prop :=
 
 /-- Number of calls that k directly participates in. -/
 def v (S : List (Call m)) (k : Fin m) : Nat := -- easy?
-  S.foldl (λ (counter c) => ite (c.fst = k ∨ c.snd = k) (counter + 1) counter) 0
+  --S.foldl (λ (counter c) => ite (c.fst = k ∨ c.snd = k) (counter + 1) counter) 0
+  S.countP (λ (c : Call m) => c.fst = k ∨ c.snd = k)
+
+#eval v [(1,2),(0,6),(7,2)] (2 : Fin 10)
 
 /-- Among n agents, to make k an expert, we need at least n-1 calls. -/
 lemma exp_needs_n_min_one_calls (S : List (Call n))
@@ -82,7 +87,7 @@ lemma exp_needs_n_min_one_calls (S : List (Call n))
     : n - 1 < S.length := by
   sorry
 
-/-- Among n agents, to make k an expert, we need at least n-1 calls. -/
+/-- Among n agents, to make everyone know k's secret, we need at least n-1 calls. -/
 lemma known_needs_n_min_one_calls (S : List (Call n))
     (h : allKnow (after S) k)
     : n - 1 < S.length := by
@@ -114,6 +119,26 @@ def phi (n : Nat) : Prop :=
 def is_minimal (m : Nat) :=
   phi m
   ∧ ∀ n < m, ¬ phi n -- note: corrected > to be < here.
+
+def initial (S : List (Call m)) (k : Fin m) : Option (Call m) :=
+  S.find? (λ c => c.fst = k ∨ c.snd = k)
+
+#eval initial [(4, 3), (0, 2), (0, 3)] (0 : Fin 5)
+
+def final (S : List (Call m)) (k : Fin m) : Option (Call m) :=
+  S.reverse.find? (λ c => c.fst = k ∨ c.snd = k)
+
+#eval final [(4, 3), (0, 2), (0, 3), (2, 4)] (0 : Fin 5)
+
+def isInitialCall (S : List (Call m)) (k : Fin m) (c : Call m) : Bool :=
+  initial S k = c
+
+#eval isInitialCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 2)
+
+def isFinalCall (S : List (Call m)) (k : Fin m) (c : Call m) : Bool :=
+  final S k = c
+
+#eval isFinalCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3)
 
 /-- Given a sequence `σ` of length `2m-5` or less that makes all `m` agents experts,
 if `m` is minimal, then nobody hears their own secret in σ. -/
@@ -166,7 +191,11 @@ theorem necessity :
   -- have claim2 : sorry := sorry -- "all calls in S are initial for both or neither"
 
   -- 1.3 Graph Building -- TODO
-  let initPart : List (Call m) := sorry
+
+
+  let initPart : List (Call m) :=
+  -- ∀(c : Call m) ∈ S, ∀(a : Fin m), isInitialCall S a c
+  sorry
   let midPart : List (Call m) := sorry
   let finalPart : List (Call m) := sorry
 
