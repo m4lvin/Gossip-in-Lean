@@ -109,6 +109,8 @@ def is_f n k :=
   ∧ σ.length = k
   ∧ ¬ ∃ σ' : List (Call n), allExpert (after σ') ∧ σ'.length < k
 
+#check List.filter
+
 def is_f_leq n k :=
   ∃ σ : List (Call n), allExpert (after σ)
   ∧ σ.length ≤  k
@@ -130,15 +132,29 @@ def final (S : List (Call m)) (k : Fin m) : Option (Call m) :=
 
 #eval final [(4, 3), (0, 2), (0, 3), (2, 4)] (0 : Fin 5)
 
-def isInitialCall (S : List (Call m)) (k : Fin m) (c : Call m) : Bool :=
+def isAgentInitialCall (S : List (Call m)) (k : Fin m) (c : Call m) : Bool :=
   initial S k = c
 
-#eval isInitialCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 2)
+#eval isAgentInitialCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3)
 
-def isFinalCall (S : List (Call m)) (k : Fin m) (c : Call m) : Bool :=
+def isAgentFinalCall (S : List (Call m)) (k : Fin m) (c : Call m) : Bool :=
   final S k = c
 
-#eval isFinalCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3)
+#eval isAgentFinalCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3)
+
+def isInitialCall (S : List (Call m)) (c : Call m) : Bool :=
+  isAgentInitialCall S c.fst c ∨ isAgentInitialCall S c.snd c
+
+#eval isInitialCall ([(4, 3), (0, 2), (0, 3), (2, 3)] : List (Call 5)) (2, 3)
+
+#eval isAgentInitialCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3)
+#eval isAgentInitialCall ([(4, 3), (0, 2), (0, 3)] : List (Call 4)) 0 (0, 2)
+
+def isFinalCall (S : List (Call m)) (c : Call m) : Bool :=
+  isAgentFinalCall S c.fst c ∨ isAgentFinalCall S c.snd c
+
+#eval isAgentFinalCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3)
+#eval isAgentFinalCall ([(4, 3), (0, 2), (0, 3)] : List (Call 4)) 0 (0, 2)
 
 /-- Given a sequence `σ` of length `2m-5` or less that makes all `m` agents experts,
 if `m` is minimal, then nobody hears their own secret in σ. -/
@@ -194,10 +210,14 @@ theorem necessity :
 
 
   let initPart : List (Call m) :=
-  -- ∀(c : Call m) ∈ S, ∀(a : Fin m), isInitialCall S a c
-  sorry
+  -- ∀(a : Fin m) ∈ S, ∀(c : Call m) ∈ S, isInitialCall S a c
+  S.filter (fun c => (isInitialCall S c))
+
   let midPart : List (Call m) := sorry
-  let finalPart : List (Call m) := sorry
+
+  let finalPart : List (Call m) :=
+  S.filter (fun c => (isFinalCall S c))
+
 
   have : S.length = initPart.length + midPart.length + finalPart.length := by
     sorry
