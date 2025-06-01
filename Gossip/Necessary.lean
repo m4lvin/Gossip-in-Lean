@@ -167,6 +167,20 @@ lemma noHo_of_minimal_expert_sequence (σ : List (Call m))
   -- rearranging argument
     sorry
 
+/--All calls in S are initial for both agents or for neither-/
+  lemma initial_both_or_neither (S : List (Call m)) :
+    ∀c ∈ S, (isAgentInitialCall S c.fst c ∧ isAgentInitialCall S c.snd c)
+    ∨ ¬(isAgentInitialCall S c.fst c ∧ isAgentInitialCall S c.snd c) := by
+    by_contra hyp
+    sorry
+
+/--All calls in S are final for both agents or for neither-/
+  lemma final_both_or_neither (S : List (Call m)) :
+    ∀c ∈ S, (isAgentFinalCall S c.fst c ∧ isAgentFinalCall S c.snd c)
+    ∨ ¬(isAgentFinalCall S c.fst c ∧ isAgentFinalCall S c.snd c) := by
+    by_contra hyp
+    sorry
+
 theorem helper {k n} (h : 4 ≤ n) : k ≤ 2 * n - 5 ↔ k < 2 * n - 4 := by
   rw [Nat.two_mul]
   have := @Nat.add_one_le_iff (k + 4) (n + n)
@@ -202,18 +216,13 @@ theorem necessity :
   -- Now we can use the lemma.
   have noHo_S : noHo S := noHo_of_minimal_expert_sequence S S_len_lt S_allExp is_minimal_m
 
-  -- TODO: define final and initial first
-  -- have claim1 : sorry := sorry -- "all calls in S are final for both or neither"
-  -- have claim2 : sorry := sorry -- "all calls in S are initial for both or neither"
-
-  -- 1.3 Graph Building -- TODO
-
+  -- 2.3 Graph Building -- TODO
 
   let initPart : List (Call m) :=
-  -- ∀(a : Fin m) ∈ S, ∀(c : Call m) ∈ S, isInitialCall S a c
   S.filter (fun c => (isInitialCall S c))
 
-  let midPart : List (Call m) := sorry
+  let midPart : List (Call m) :=
+  S.filter (fun c => ¬(isInitialCall S c) ∧ ¬(isFinalCall S c))
 
   let finalPart : List (Call m) :=
   S.filter (fun c => (isFinalCall S c))
