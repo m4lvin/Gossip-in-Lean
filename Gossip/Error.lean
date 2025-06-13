@@ -20,6 +20,11 @@ inductive Call : Type
   | fstE : (caller : Agent) → (err : Agent) → (callee : Agent) → Call -- a^c b
   | sndE : (caller : Agent) → (callee : Agent) → (err : Agent) → Call -- a b^c
 
+def other (i : Agent) : Call → Agent
+  | .normal a b => if i = a then b else a
+  | .fstE a _ b => if i = a then b else a
+  | .sndE a b _ => if i = a then b else a
+
 -- TODO: nice notation for `Call` values
 
 instance instMembershipAgentCall : Membership Agent Call := .mk $ fun c i => match c with
@@ -66,38 +71,32 @@ def roleOfIn (i : Agent) : (c : Call) → Role
 
 /-! ## Semantics -/
 
-mutual
+
+-- FIXME: below is missing stubbornness!!!!
 
 /-- Values known by agent i after the given sequent. -/
-def resultSet : Agent → Sequent → Set Value
+def resultSet : Agent → Sequent → Set Value -- IDEA: better use `Finset` here?
   | i, [] => { (i, true) } -- initial distribution
   | i, (C :: σ) =>
     let old := resultSet i σ
-    let knownWrongBy k : Set Value := fun v =>
-      match v with
-        | ⟨j,true ⟩ => eval σ (K k (S j (j,false)))
-        | ⟨j,false⟩ => eval σ (K k (S j (j,true )))
     match C, roleOfIn i C with
       -- Not involved:
       | _, Other => old
       -- Normal calls:
-      | .normal a b, Caller => (resultSet a σ) ∪ (resultSet b σ \ knownWrongBy b)
-      | .normal a b, Callee => (resultSet a σ \ knownWrongBy a) ∪ (resultSet b σ)
+      | .normal a b, _ => (resultSet a σ) ∪ (resultSet b σ)
       -- transmission error by a:
-      | .fstE a c b, Caller => (resultSet a σ) ∪ (resultSet b σ \ knownWrongBy b) -- no self-error!
-      | .fstE a c b, Callee => (invert c $ resultSet a σ \ knownWrongBy a) ∪ (resultSet b σ)
+      | .fstE a c b, _ => (invert c $ resultSet a σ) ∪ (resultSet b σ)
       -- transmission error by b:
-      | .sndE a b c, Caller => (resultSet a σ) ∪ (invert c $ resultSet b σ \ knownWrongBy b)
-      | .sndE a b c, Callee => (resultSet a σ \ knownWrongBy a) ∪ (resultSet b σ) -- no self-error!
-termination_by
-  i σ => (σ.length, 0)
-decreasing_by
-  all_goals
-    apply Prod.Lex.left; simp -- sequence becomes shorter in all recursive calls!
+      | .sndE a b c, _ => (resultSet a σ) ∪ (invert c $ resultSet b σ)
 
 /-- The epistemic accessibility relation -/
 def equiv : Agent → Sequent → Sequent → Prop
-  | u, σ, τ => sorry -- this will call `resultSet`
+  | _, [], [] => true
+  | i, C :: σ, D :: τ => equiv i σ τ
+                       ∧ roleOfIn i C = roleOfIn i D
+                       ∧ resultSet (other i C) σ = resultSet (other i C) τ
+                       -- FIXME actually not the resultSet but the *communicated* set!
+  | _, _, _ => false
 
 def eval : Sequent → Form → Prop
   | _, .Top => True
@@ -105,12 +104,3 @@ def eval : Sequent → Form → Prop
   | σ, .S i (j, k) => (j, k) ∈ resultSet i σ
   | σ, .Con φ ψ => eval σ φ ∧ eval σ ψ
   | σ, .K i φ => ∀ τ, equiv i σ τ → eval τ φ
-termination_by
-  σ φ => (σ.length, sizeOf φ)
-decreasing_by
-  · apply Prod.Lex.right; simp -- formula becomes simpler in these cases
-  · apply Prod.Lex.right; simp
-  · apply Prod.Lex.right; simp; linarith
-  · apply Prod.Lex.right; simp
-  · sorry -- PROBLEM: clause for K goes to longer/arbitrary sequences !
-end
