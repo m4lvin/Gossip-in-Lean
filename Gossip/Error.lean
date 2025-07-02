@@ -35,7 +35,7 @@ instance {a : Agent} {c : Call} : Decidable (a ∈ c) := by
     try exact instDecidableFalse
 
 /-- History of calls in reverse order, newest call is the first element. -/
-abbrev Sequent : Type := List Call
+abbrev Sequence : Type := List Call
 
 /-- Flip the value of the secret of this agent in the given set. -/
 def invert : Agent -> Set Value -> Set Value
@@ -49,6 +49,14 @@ inductive Form : Type
   | Neg : Form → Form
   | S : Agent → (Agent × Bool) → Form -- S a (b, k) means a has value k of b
   | K : Agent → Form → Form
+
+@[simp]
+def Form.length : Form → Nat
+  | Top => 0
+  | Con φ1 φ2 => 1 + φ1.length + φ2.length
+  | Neg φ => 1 + φ.length
+  | S _ _ => 4 -- hmm
+  | K _ φ => 1 + φ.length
 
 open Form
 
@@ -68,12 +76,14 @@ def roleOfIn (i : Agent) : (c : Call) → Role
 
 mutual
 
-/-- Values known by agent i after the given sequent. -/
-def resultSet : Agent → Sequent → Set Value
+/-- (Def 4) Call Semantics
+
+What values does this agent have after this sequence? -/
+def resultSet : Agent → Sequence → Set Value
   | i, [] => { (i, true) } -- initial distribution
   | i, (C :: σ) =>
     let old := resultSet i σ
-    let knownWrongBy k : Set Value := fun v =>
+    let knownWrongBy k : Set Value := fun v => -- this is * in the paper
       match v with
         | ⟨j,true ⟩ => eval σ (K k (S j (j,false)))
         | ⟨j,false⟩ => eval σ (K k (S j (j,true )))
@@ -90,27 +100,67 @@ def resultSet : Agent → Sequent → Set Value
       | .sndE a b c, Caller => (resultSet a σ) ∪ (invert c $ resultSet b σ \ knownWrongBy b)
       | .sndE a b c, Callee => (resultSet a σ \ knownWrongBy a) ∪ (resultSet b σ) -- no self-error!
 termination_by
-  i σ => (σ.length, 0)
+  i σ => (3, σ.length) -- Here we need resultSet a formula, value must be larger than `K k (S j j)`.
 decreasing_by
+  · apply Prod.Lex.right; simp
+  · simp -- Here we need `K k (S j j)  <  resultSet`
+    -- apply Prod.Lex.left; simp
+    sorry
+  · sorry -- same problem
   all_goals
-    apply Prod.Lex.left; simp -- sequence becomes shorter in all recursive calls!
+    try (apply Prod.Lex.right; simp) -- sequence becomes shorter in all recursive calls!
 
-/-- The epistemic accessibility relation -/
-def equiv : Agent → Sequent → Sequent → Prop
-  | u, σ, τ => sorry -- this will call `resultSet`
+/-- Right after sequence `σ`, what values will caller and callee contribute to the call? -/
+def contribSet (σ : Sequence) : Call → Set Value × Set Value
+  | .normal a b => (resultSet a σ, resultSet b σ)
+  | .fstE a c b => (invert c $ resultSet a σ, resultSet b σ)
+  | .sndE a b c => (resultSet a σ, invert c $ resultSet b σ)
+termination_by
+  c => (4, σ.length)
+decreasing_by
+  -- Here we need `resultSet  <  contribSet`
+  all_goals
+    apply Prod.Lex.left; simp
 
-def eval : Sequent → Form → Prop
+/-- (Def 5) The epistemic accessibility relation ∼ₐ
+
+>>> TODO TODO this still needs to be made asynchronous <<<
+Then it will call `contribSet` on sequences of arbitrary length.
+Or should the recursion-order label then be σ.length + τ.length ?
+-/
+def equiv : Agent → Sequence → Sequence → Prop
+  | _, [], [] => true
+  | i, C :: σ, D :: τ => equiv i σ τ
+                       ∧ roleOfIn i C = roleOfIn i D
+                       -- Using `resultSet (other i C) σ = resultSet (other i C) τ` here would
+                       -- be wrong because it would ignore errors. Hence we need `contribSet`.
+                       -- The following is still entirely correct, we should not care about i's contrib!
+                       -- FIXME
+                       ∧ contribSet σ = contribSet τ
+  | _, _, _ => false
+termination_by
+  i σ τ => (5, σ.length) -- no formula here, should be above contribSet
+decreasing_by
+  · apply Prod.Lex.right; simp
+  · sorry -- Here we need `contribSet < equiv`
+  · sorry -- Here we need `contribSet < equiv`
+
+/-- (Def 6) Semantics -/
+def eval : Sequence → Form → Prop
   | _, .Top => True
   | σ, .Neg φ => ¬ eval σ φ
   | σ, .S i (j, k) => (j, k) ∈ resultSet i σ
   | σ, .Con φ ψ => eval σ φ ∧ eval σ ψ
   | σ, .K i φ => ∀ τ, equiv i σ τ → eval τ φ
 termination_by
-  σ φ => (σ.length, sizeOf φ)
+  σ φ => (φ.length, σ.length)
 decreasing_by
-  · apply Prod.Lex.right; simp -- formula becomes simpler in these cases
-  · apply Prod.Lex.right; simp
-  · apply Prod.Lex.right; simp; linarith
-  · apply Prod.Lex.right; simp
-  · sorry -- PROBLEM: clause for K goes to longer/arbitrary sequences !
+  -- formula becomes simpler in all cases!
+  · apply Prod.Lex.left; simp
+  · apply Prod.Lex.left; simp -- Here we need `resultSet  <  S i i`
+  · apply Prod.Lex.left; simp; linarith
+  · apply Prod.Lex.left; simp
+  · apply Prod.Lex.left; simp; sorry -- Here we need `equiv  <  K i φ`
+  · apply Prod.Lex.left; simp
+
 end
