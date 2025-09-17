@@ -1,0 +1,75 @@
+# based on https://github.com/leanprover-community/lean-liquid/blob/master/.github/workflows/build.yml
+# with additions from https://github.com/PatrickMassot/leanblueprint
+
+on:
+  push:
+
+name: CI
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read  # Read access to repository contents
+  pages: write    # Write access to GitHub Pages
+  id-token: write # Write access to ID tokens
+
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ env.GIT_HISTORY_DEPTH }}
+
+      - name: Install elan
+        run: |
+          set -o pipefail
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- --default-toolchain none -y
+          ~/.elan/bin/lean --version
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache both .lake/build folders
+        uses: actions/cache@v4
+        with:
+          path: |
+            .lake/build
+            docbuild/.lake/build
+          key: lakeBuild-${{ hashFiles('lake-manifest.json') }}
+          restore-keys: lakeBuild-
+
+      - name: Build
+        run: make
+
+      - name: Build documentation
+        if: github.ref_name == 'main'
+        run: make doc
+
+      - name: Copy documentation to `home_page/docs`
+        if: github.ref_name == 'main'
+        run: |
+          rm -rf home_page
+          mkdir -p home_page
+          cp -r docbuild/.lake/build/doc home_page/docs
+
+      - name: Remove unnecessary lake files from documentation in `home_page/docs`
+        if: github.ref_name == 'main'
+        run: |
+          find home_page/docs -name "*.trace" -delete
+          find home_page/docs -name "*.hash" -delete
+
+      - name: List website content
+        if: github.ref_name == 'main'
+        run: find home_page
+
+      - name: Upload website
+        if: github.ref_name == 'main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'home_page/'
+
+      - name: Deploy to GitHub Pages
+        if: github.ref_name == 'main'
+        id: deployment
+        uses: actions/deploy-pages@v4

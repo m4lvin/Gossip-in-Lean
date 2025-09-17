@@ -33,12 +33,6 @@ lemma addAgentOldNew {s : GossipState n} {i : Fin n} :
 lemma addAgentNewOld {s : GossipState n} {i : Fin n} :
     ¬ addAgent s (Fin.last n) i.castSucc := by
     simp [addAgent]
-    cases i
-    simp [Fin.castSucc, Fin.last]
-    intro a
-    subst a
-    simp_all only [lt_self_iff_false]
-
 
 -- New agents know their own secret.
 lemma addAgentNewNew {s : GossipState n} :

@@ -5,11 +5,11 @@
 -- Description:
 -- - This file contains the representation of gossip in Lean.
 
-import Mathlib.Data.Matrix.Notation
+import Mathlib.LinearAlgebra.Matrix.Notation
 import Mathlib.Tactic.Linarith
 
 -- State representation that contains the all gossip information between any agents.
-def GossipState (n : Nat) : Type := Fin n → Fin n → Prop
+abbrev GossipState (n : Nat) : Type := Fin n → Fin n → Prop
 
 -- A Call is a pair of agents.
 abbrev Call (n : Nat): Type := Fin n × Fin n
@@ -113,12 +113,7 @@ lemma makeCalls_cons (s : GossipState n) (c : Call n) (cs : List (Call n)) :
 -- Makecalls is the same as makeCalls on init followed by makeCall on last.
 lemma makeCalls_snoc (s : GossipState n) (cs : List (Call n)) (c : Call n) :
   makeCalls s (cs ++ [c]) = makeCall (makeCalls s cs) c := by
-    induction cs generalizing s
-    case nil =>
-      rfl
-    case cons c' cs ih =>
-      simp [makeCalls, ih]
-
+    simp [makeCalls]
 
 -- Adding the same call to two states means the gossip relation remains.
 lemma makeCall_increases_gossip (s1 s2 : GossipState n) (c : Call n) :

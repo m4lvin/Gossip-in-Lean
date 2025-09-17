@@ -25,8 +25,6 @@ import Mathlib.Data.List.Basic
 
 import Gossip.Sufficient
 
-#print List.countP
-
 variable {n : Nat}
 
 abbrev after (σ : List (Call n)) := makeCalls (initialState n) σ
@@ -79,8 +77,6 @@ def v (S : List (Call m)) (k : Fin m) : Nat := -- easy?
   --S.foldl (λ (counter c) => ite (c.fst = k ∨ c.snd = k) (counter + 1) counter) 0
   S.countP (λ (c : Call m) => c.fst = k ∨ c.snd = k)
 
-#eval v [(1,2),(0,6),(7,2)] (2 : Fin 10)
-
 /-- Among n agents, to make k an expert, we need at least n-1 calls. -/
 lemma exp_needs_n_min_one_calls (S : List (Call n))
     (h : isExpert (after S) k)
@@ -109,8 +105,6 @@ def is_f n k :=
   ∧ σ.length = k
   ∧ ¬ ∃ σ' : List (Call n), allExpert (after σ') ∧ σ'.length < k
 
-#check List.filter
-
 def is_f_leq n k :=
   ∃ σ : List (Call n), allExpert (after σ)
   ∧ σ.length ≤  k
@@ -125,36 +119,36 @@ def is_minimal (m : Nat) :=
 def initial (S : List (Call m)) (k : Fin m) : Option (Call m) :=
   S.find? (λ c => c.fst = k ∨ c.snd = k)
 
-#eval initial [(4, 3), (0, 2), (0, 3)] (0 : Fin 5)
+example : initial [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) = some (0,2) := by rfl
 
 def final (S : List (Call m)) (k : Fin m) : Option (Call m) :=
   S.reverse.find? (λ c => c.fst = k ∨ c.snd = k)
 
-#eval final [(4, 3), (0, 2), (0, 3), (2, 4)] (0 : Fin 5)
+example : final [(4, 3), (0, 2), (0, 3), (2, 4)] (0 : Fin 5) = some (0,3) := by rfl
 
 def isAgentInitialCall (S : List (Call m)) (k : Fin m) (c : Call m) : Bool :=
   initial S k = c
 
-#eval isAgentInitialCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3)
+example : ¬ isAgentInitialCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3) := by decide
 
 def isAgentFinalCall (S : List (Call m)) (k : Fin m) (c : Call m) : Bool :=
   final S k = c
 
-#eval isAgentFinalCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3)
+example : isAgentFinalCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3) := by decide
 
 def isInitialCall (S : List (Call m)) (c : Call m) : Bool :=
   isAgentInitialCall S c.fst c ∨ isAgentInitialCall S c.snd c
 
-#eval isInitialCall ([(4, 3), (0, 2), (0, 3), (2, 3)] : List (Call 5)) (2, 3)
+example : ¬ isInitialCall ([(4, 3), (0, 2), (0, 3), (2, 3)] : List (Call 5)) (2, 3) := by decide
 
-#eval isAgentInitialCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3)
-#eval isAgentInitialCall ([(4, 3), (0, 2), (0, 3)] : List (Call 4)) 0 (0, 2)
+example : ¬ isAgentInitialCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3) := by decide
+example : ¬ isAgentInitialCall ([(4, 3), (0, 2), (0, 3)] : List (Call 4)) 0 (0, 2) := by decide
 
 def isFinalCall (S : List (Call m)) (c : Call m) : Bool :=
   isAgentFinalCall S c.fst c ∨ isAgentFinalCall S c.snd c
 
-#eval isAgentFinalCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3)
-#eval isAgentFinalCall ([(4, 3), (0, 2), (0, 3)] : List (Call 4)) 0 (0, 2)
+example : isAgentFinalCall [(4, 3), (0, 2), (0, 3)] (0 : Fin 5) (0, 3) := by decide
+example : ¬ isAgentFinalCall ([(4, 3), (0, 2), (0, 3)] : List (Call 4)) 0 (0, 2) := by decide
 
 /-- Given a sequence `σ` of length `2m-5` or less that makes all `m` agents experts,
 if `m` is minimal, then nobody hears their own secret in σ. -/
@@ -208,8 +202,7 @@ theorem necessity :
     simp
     constructor
     · exact ⟨le_m, S, ⟨S_allExp, S_len_lt⟩⟩
-    · intro k k_lt_m four_lt_k
-      intro σ σ_AllExp
+    · intro k k_lt_m four_lt_k σ σ_AllExp
       have := m_is_minimal k k_lt_m four_lt_k σ σ_AllExp
       simp_rw [@Nat.le_iff_lt_add_one] at this
       omega

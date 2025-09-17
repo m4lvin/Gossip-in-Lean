@@ -1,0 +1,10 @@
+name = "Gossip"
+defaultTargets = ["Gossip"]
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4.git"
+rev = "v4.24.0-rc1"
+
+[[lean_lib]]
+name = "Gossip"
