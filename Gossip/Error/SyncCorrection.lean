@@ -33,6 +33,12 @@ notation "⌜" a:arg  b:arg "⌝" => Call.normal a b
 notation "⌜" a:arg "^" c:arg b:arg "⌝" => Call.fstE a c b
 notation "⌜"  a:arg b:arg "^" c:arg "⌝" => Call.sndE a b c
 
+/-- The pair of agents in the call, ignoring whether an error is made. -/
+def Call.pair : Call → (Agent × Agent)
+  | ⌜ a   b   ⌝ => (a , b)
+  | ⌜ a^_ b   ⌝ => (a , b)
+  | ⌜ a   b^_ ⌝ => (a , b)
+
 instance instMembershipAgentCall : Membership Agent Call := .mk $ fun c i => match c with
   | ⌜ a   b   ⌝ => i = a ∨ i = b
   | ⌜ a^_ b   ⌝ => i = a ∨ i = b
@@ -88,6 +94,7 @@ inductive Role : Type
   | Caller : Role
   | Callee : Role
   | Other : Role
+deriving DecidableEq
 
 open Role
 
@@ -95,6 +102,19 @@ def roleOfIn (i : Agent) : (c : Call) → Role
   | ⌜ a   b   ⌝ => if i = a then Caller else if i = b then Callee else Other
   | ⌜ a^_ b   ⌝ => if i = a then Caller else if i = b then Callee else Other
   | ⌜ a   b^_ ⌝ => if i = a then Caller else if i = b then Callee else Other
+
+@[simp]
+lemma roleOfIn_a : roleOfIn a ⌜ a b ⌝ = Caller := by simp [roleOfIn]
+lemma roleOfIn_eq_Caller_iff : roleOfIn a ⌜ x y ⌝ = Caller ↔ a = x := by simp [roleOfIn]; grind
+lemma roleOfIn_eq_Callee_iff : roleOfIn a ⌜ x y ⌝ = Callee ↔ a ≠ x ∧ a = y := by simp [roleOfIn]; grind
+lemma roleOfIn_eq_Other_iff : roleOfIn a ⌜ x y ⌝ = Other ↔ a ≠ x ∧ a ≠ y := by simp [roleOfIn]; grind
+
+/- TODO same lemmas for error calls?
+  | ⌜ a^_ b   ⌝ => if i = a then Caller else if i = b then Callee else Other
+  | ⌜ a   b^_ ⌝ => if i = a then Caller else if i = b then Callee else Other
+-/
+
+
 
 /-! ## Semantics -/
 
@@ -146,11 +166,12 @@ def equiv {k} (a : Agent) : (Dist × {σ : Sequence // σ.length = k}) → (Dist
   | (ι, ⟨C :: σ,_⟩), (ι', ⟨D :: τ,_⟩) =>
                           @equiv (k-1) a (ι,⟨σ, by aesop⟩) (ι',⟨τ, by aesop⟩)
                         ∧ roleOfIn a C = roleOfIn a D
-                        -- Depending on the role, observe the contribSet of the other agent in the call:
+                        -- Depending on the role, observe who is in the call and the contribSet of the other
                         ∧ match roleOfIn a C with
                           | Other => True
-                          | Caller => (contribSet ι σ C).2 = (contribSet ι' τ D).2
-                          | Callee => (contribSet ι σ C).1 = (contribSet ι' τ D).1
+                          | Caller => (contribSet ι σ C).2 = (contribSet ι' τ D).2 ∧ C.pair = D.pair
+                          | Callee => (contribSet ι σ C).1 = (contribSet ι' τ D).1 ∧ C.pair = D.pair
+
 termination_by
   ισ _ => (ισ.2.1.length, 0) -- should be above contribSet
 decreasing_by
@@ -193,17 +214,73 @@ def equi (a : Agent) (ισ : Dist × Sequence) (ι'τ : Dist × Sequence) : Prop
 
 notation ισ:arg " ~_ " a:arg ι'τ:arg => equi a ισ ι'τ
 
-notation ι σ "⊧" φ => eval ι σ φ
+notation ισ "⊧" φ => eval ισ.1 ισ.2 φ
 
 /-- Validity of formulas -/
 def valid (φ : Form) := ∀ ι σ, eval ι σ φ
 prefix:100 "⊨" => valid -- FIXME what's a good precedence value here?
 
+lemma same_set_then_know_same (same_set : ι⌈σ'⌉b = ι'⌈τ'⌉b) :
+    eval ι' τ' (K b (S a (a, v))) ↔ eval ι σ' (K b (S a (a, v))) := by
+  sorry
+
+
 /-- Lemma 7 -/
 lemma indistinguishable_then_same_values {ι ι': Dist} {σ τ : Sequence} :
     (ι, σ) ~_a (ι', τ)  →  ι⌈σ⌉a = ι'⌈τ⌉a := by
-  intro equ
-  sorry
+  intro ⟨same_len, equ⟩
+  simp at same_len
+  induction σ generalizing τ
+  case nil =>
+    have := List.length_eq_zero_iff.mp same_len.symm
+    subst this
+    simp_all [resultSet, equiv]
+  case cons κ σ' IH =>
+    simp at same_len
+    rcases List.exists_cons_of_length_eq_add_one same_len.symm with ⟨κ', τ', τ_def⟩
+    subst (τ_def : τ = κ' :: τ')
+    simp only [List.length_cons, equiv, Nat.add_one_sub_one] at equ
+    specialize IH (by grind) equ.1 -- IH now says `ι⌈σ'⌉a = ι'⌈τ'⌉a`
+    -- distinguish cases whether a is involved in κ (and this also κ') or not
+    cases r : roleOfIn a κ
+    case Caller =>
+      simp [r] at equ
+      rcases equ with ⟨prev_equ, Caller_eq, prev_same_contrib, same_pair⟩
+      unfold contribSet at prev_same_contrib
+      cases κ <;> cases κ' <;> simp at * -- 6 cases should drop out here?
+      case normal.normal a_ b a__ b__ =>
+        rw [roleOfIn_eq_Caller_iff] at r
+        subst r
+        rw [Eq.comm, roleOfIn_eq_Caller_iff] at Caller_eq
+        subst Caller_eq
+        simp [Call.pair] at same_pair
+        subst same_pair
+        simp at same_len
+        unfold resultSet
+        simp
+        ext x
+        simp
+        constructor
+        · intro hyp; convert hyp using 2
+          · aesop
+          · aesop
+          · rcases x with ⟨v,b⟩
+            cases b <;> simp [Set.instMembership, Set.Mem]
+            all_goals
+              rw [same_set_then_know_same]; tauto
+        · intro hyp; convert hyp using 2
+          · aesop
+          · rcases x with ⟨v,b⟩
+            cases b <;> simp [Set.instMembership, Set.Mem]
+            all_goals
+              rw [same_set_then_know_same]; tauto
+      all_goals
+        -- 8 more cases ... can we do this in a more general helper lemma?
+        sorry
+    case Callee =>
+      sorry
+    case Other =>
+      sorry
 
 /-- Lemma 8. Note that `v` here says whether we have b or \overline{b}. -/
 lemma local_is_known {a b : Agent} (v : Bool) :
@@ -214,10 +291,30 @@ lemma local_is_known {a b : Agent} (v : Bool) :
 
 /-- Lemma 9 -/
 lemma knowledge_of_secrets_is_preserved {a b : Agent} {v : Bool} :
-    (ι σ ⊧ Kv a b)
+    ((ι,σ) ⊧ Kv a b)
     ∧
     (σ ⊑ τ)
     →
-    (ι σ ⊧ Kv a b)
+    ((ι,σ) ⊧ Kv a b)
     := by
   sorry
+
+/-- Lemma 10 -/
+lemma know_your_own : ⊨ Kv a a := by
+  sorry
+
+/-!
+
+Still to do:
+
+/-- Lemma 11 -/
+
+/-- Corollary 12 -/
+
+/-- Corollary 13 -/
+
+Examples?
+
+/-- Proposition 17, 18 and 19 maybe too hard? -/
+
+-/
