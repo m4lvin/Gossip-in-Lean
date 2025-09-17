@@ -9,26 +9,34 @@ import Mathlib.Tactic.Linarith
 Here we define: agents, values, calls, sequents.
 -/
 
-abbrev Agent := Nat -- IDEA use `Fin n`
+abbrev Agent := Nat -- IDEA use `Fin n` with `variable {n : Nat}` later
 
-abbrev Value := (Agent × Bool)
+abbrev Value := (Agent × Bool) -- using Bool instead of 0 and 1
 
-abbrev State : Type := Agent → Set Value
+-- We allow to write "a" for "(a, 1)", meaning NOT "(a, 0)" as in paper at the moment.
+instance : Coe Agent Value := ⟨fun a => ⟨a,true⟩⟩
+
+/-- (Def 1) Secret distribution -/
+abbrev Dist := Agent → Set Value
 
 /-- Every agent only has their own value. -/
-def isInitial (s : State) : Prop := ∀ a, s a = { ⟨a,True⟩ } ∨ s a = { ⟨a,False⟩ }
+def isInitial (ι : Dist) :=
+  ∀ a, ι a = { ⟨a,True⟩ } ∨ ι a = { ⟨a,False⟩ }
 
 inductive Call : Type
   | normal : (caller : Agent) → (callee : Agent) → Call -- a b
   | fstE : (caller : Agent) → (err : Agent) → (callee : Agent) → Call -- a^c b
   | sndE : (caller : Agent) → (callee : Agent) → (err : Agent) → Call -- a b^c
 
--- IDEA nice notation for `Call` values
+-- Nicer notation for `Call`
+notation "⌜" a:arg  b:arg "⌝" => Call.normal a b
+notation "⌜" a:arg "^" c:arg b:arg "⌝" => Call.fstE a c b
+notation "⌜"  a:arg b:arg "^" c:arg "⌝" => Call.sndE a b c
 
 instance instMembershipAgentCall : Membership Agent Call := .mk $ fun c i => match c with
-  | .normal a b => i = a ∨ i = b
-  | .fstE a _ b => i = a ∨ i = b
-  | .sndE a b _ => i = a ∨ i = b
+  | ⌜ a   b   ⌝ => i = a ∨ i = b
+  | ⌜ a^_ b   ⌝ => i = a ∨ i = b
+  | ⌜ a   b^_ ⌝ => i = a ∨ i = b
 
 instance {a : Agent} {c : Call} : Decidable (a ∈ c) := by
   rcases c with (⟨d,e⟩|⟨d,_,e⟩|⟨d,e,_⟩) <;> by_cases a = d <;> by_cases a = e
@@ -37,8 +45,13 @@ instance {a : Agent} {c : Call} : Decidable (a ∈ c) := by
     try exact instDecidableTrue
     try exact instDecidableFalse
 
-/-- History of calls in reverse order, newest call is the first element. -/
+/-- (Def 2) Call sequence.
+For easier pattern matching this is in *reverse* order, i.e. the newest call is the first element. -/
 abbrev Sequence : Type := List Call
+
+/-- Subsequence relation: τ extends σ.
+Because the lists are with the newest call first, this can be defined as saying that σ is a suffix of tau. -/
+notation σ:arg "⊑" τ:arg => σ <:+ τ
 
 /-- Flip the value of the secret of this agent in the given set. -/
 def invert : Agent -> Set Value -> Set Value
@@ -46,12 +59,22 @@ def invert : Agent -> Set Value -> Set Value
 
 /-! ## Syntax -/
 
+/-- (Def 3) Logical language -/
 inductive Form : Type
-  | Top : Form
-  | Con : Form → Form → Form
-  | Neg : Form → Form
-  | S : Agent → (Agent × Bool) → Form -- S a (b, k) means a has value k of b
-  | K : Agent → Form → Form
+  | Top : Form -- ⊤
+  | Con : Form → Form → Form -- ∧
+  | Neg : Form → Form -- ¬
+  | S : (a : Agent) → (Agent × Bool) → Form -- S a (b, k) means agent a has value k of agent b
+  | K : (a : Agent) → (φ : Form) → Form -- knowing that
+
+open Form
+
+notation "¬'" φ:arg => Neg φ
+notation φ1:arg "⋀" φ2:arg => Con φ1 φ2
+notation φ1:arg "⋁" φ2:arg => Neg (Con (Neg φ1) (Neg φ2))
+notation φ1:arg "⟹" φ2:arg => (Neg φ1) ⋁ φ2
+
+notation "Kv" a:arg b:arg => (K a (S b b)) ⋁ (K a (S b (b,false)))
 
 @[simp]
 def Form.length : Form → Nat
@@ -61,8 +84,6 @@ def Form.length : Form → Nat
   | S _ _ => 1
   | K _ φ => 1 + φ.length
 
-open Form
-
 inductive Role : Type
   | Caller : Role
   | Callee : Role
@@ -71,68 +92,67 @@ inductive Role : Type
 open Role
 
 def roleOfIn (i : Agent) : (c : Call) → Role
-  | .normal a b => if i = a then Caller else if i = b then Callee else Other
-  | .fstE a _ b => if i = a then Caller else if i = b then Callee else Other
-  | .sndE a b _ => if i = a then Caller else if i = b then Callee else Other
+  | ⌜ a   b   ⌝ => if i = a then Caller else if i = b then Callee else Other
+  | ⌜ a^_ b   ⌝ => if i = a then Caller else if i = b then Callee else Other
+  | ⌜ a   b^_ ⌝ => if i = a then Caller else if i = b then Callee else Other
 
 /-! ## Semantics -/
 
 mutual
 
-/-- (Def 4) Call Semantics
-
+/-- (Def 4) Semantics of call.
 What values does this agent have after this sequence? -/
-def resultSet : Agent → State → Sequence → Set Value
-  | i, s, [] => s i -- initial distribution is given by the state
-  | i, s, (C :: σ) =>
-    let old := resultSet i s σ
-    let knownWrongBy k : Set Value := fun v => -- this is * in the paper
+def resultSet (a : Agent) : Dist → Sequence → Set Value
+  | ι, [] => ι a -- for the basis, ι[ε] = ι
+  | ι, (C :: σ) =>
+    let old := resultSet a ι σ
+    let knownIncorrect k : Set Value := fun v => -- the set *
       match v with
-        | ⟨j,true ⟩ => eval s σ (K k (S j (j,false)))
-        | ⟨j,false⟩ => eval s σ (K k (S j (j,true )))
-    match C, roleOfIn i C with
+        | ⟨j,true ⟩ => eval ι σ (K k (S j (j,false)))
+        | ⟨j,false⟩ => eval ι σ (K k (S j (j,true )))
+    match C, roleOfIn a C with
       -- Not involved:
       | _, Other => old
       -- Normal calls:
-      | .normal a b, Caller => (resultSet a s σ) ∪ (resultSet b s σ \ knownWrongBy b)
-      | .normal a b, Callee => (resultSet a s σ \ knownWrongBy a) ∪ (resultSet b s σ)
-      -- transmission error by a:
-      | .fstE a _ b, Caller => (resultSet a s σ) ∪ (resultSet b s σ \ knownWrongBy b) -- no self-error!
-      | .fstE a c b, Callee => (invert c $ resultSet a s σ \ knownWrongBy a) ∪ (resultSet b s σ)
-      -- transmission error by b:
-      | .sndE a b c, Caller => (resultSet a s σ) ∪ (invert c $ resultSet b s σ \ knownWrongBy b)
-      | .sndE a b _, Callee => (resultSet a s σ \ knownWrongBy a) ∪ (resultSet b s σ) -- no self-error!
+      | ⌜ a b ⌝, Caller => (resultSet a ι σ) ∪ (resultSet b ι σ \ knownIncorrect b)
+      | ⌜ a b ⌝, Callee => (resultSet a ι σ \ knownIncorrect a) ∪ (resultSet b ι σ)
+      -- error from a:
+      | ⌜ a^_ b ⌝, Caller => (resultSet a ι σ) ∪ (resultSet b ι σ \ knownIncorrect b) -- no self-error!
+      | ⌜ a^c b ⌝, Callee => (invert c $ resultSet a ι σ \ knownIncorrect a) ∪ (resultSet b ι σ)
+      -- error from b:
+      | ⌜ a b^c ⌝, Caller => (resultSet a ι σ) ∪ (invert c $ resultSet b ι σ \ knownIncorrect b)
+      | ⌜ a b^_ ⌝, Callee => (resultSet a ι σ \ knownIncorrect a) ∪ (resultSet b ι σ) -- no self-error!
 termination_by
-  _ _  σ => (σ.length, 0) -- should be below contribSet
+  _ σ => (σ.length, 0) -- should be below contribSet
 decreasing_by
   all_goals
     apply Prod.Lex.left; simp -- sequence becomes shorter in all recursive calls!
 
 /-- Right after sequence `σ`, what values will caller and callee contribute to the call? -/
-def contribSet (s : State) (σ : Sequence) : Call → Set Value × Set Value
-  | .normal a b => (resultSet a s σ, resultSet b s σ)
-  | .fstE a c b => (invert c $ resultSet a s σ, resultSet b s σ)
-  | .sndE a b c => (resultSet a s σ, invert c $ resultSet b s σ)
+def contribSet (ι : Dist) (σ : Sequence) : Call → Set Value × Set Value
+  | ⌜ a   b   ⌝ => (resultSet a ι σ           ,            resultSet b ι σ)
+  | ⌜ a^c b   ⌝ => (invert c $ resultSet a ι σ,            resultSet b ι σ)
+  | ⌜ a   b^c ⌝ => (resultSet a ι σ           , invert c $ resultSet b ι σ)
 termination_by
   _ => (σ.length, 1) -- should be above resultSet
 decreasing_by
   all_goals
     apply Prod.Lex.right; simp
 
-/-- (Def 5) The *synchronous* epistemic accessibility relation ≈ₐ -/
-def equiv {k} : Agent → (State × {σ : Sequence // σ.length = k}) → (State × {σ : Sequence // σ.length = k}) → Prop
-  | i, (s1, ⟨[],_⟩), (s2, ⟨[],_⟩) => isInitial s1 ∧ isInitial s2 ∧ s1 i = s2 i
-  | i, (s1, ⟨C :: σ,_⟩), (s2, ⟨D :: τ,_⟩) =>
-                          @equiv (k-1) i (s1,⟨σ, by aesop⟩) (s2,⟨τ, by aesop⟩)
-                        ∧ roleOfIn i C = roleOfIn i D
+/-- (Def 5) Observation relation.
+This is *synchronous*. -/
+def equiv {k} (a : Agent) : (Dist × {σ : Sequence // σ.length = k}) → (Dist × {σ : Sequence // σ.length = k}) → Prop
+  | (ι, ⟨[]    ,_⟩), (ι', ⟨[]    ,_⟩) => isInitial ι ∧ isInitial ι' ∧ ι a = ι' a
+  | (ι, ⟨C :: σ,_⟩), (ι', ⟨D :: τ,_⟩) =>
+                          @equiv (k-1) a (ι,⟨σ, by aesop⟩) (ι',⟨τ, by aesop⟩)
+                        ∧ roleOfIn a C = roleOfIn a D
                         -- Depending on the role, observe the contribSet of the other agent in the call:
-                        ∧ match roleOfIn i C with
+                        ∧ match roleOfIn a C with
                           | Other => True
-                          | Caller => (contribSet s1 σ C).2 = (contribSet s2 τ D).2
-                          | Callee => (contribSet s1 σ C).1 = (contribSet s2 τ D).1
-
+                          | Caller => (contribSet ι σ C).2 = (contribSet ι' τ D).2
+                          | Callee => (contribSet ι σ C).1 = (contribSet ι' τ D).1
 termination_by
-  _ s1σ _ => (s1σ.2.1.length, 0) -- should be above contribSet
+  ισ _ => (ισ.2.1.length, 0) -- should be above contribSet
 decreasing_by
   · apply Prod.Lex.left; simp
   · apply Prod.Lex.left; simp
@@ -141,16 +161,16 @@ decreasing_by
     have : σ.length = τ.length := by aesop
     aesop
 
-/-- (Def 6) Semantics -/
-def eval : State → Sequence → Form → Prop
+/-- (Def 6) Semantics. -/
+def eval : Dist → Sequence → Form → Prop
   | _, _, .Top => True
-  | s, σ, .Neg φ => ¬ eval s σ φ
-  | s, σ, .S i (j, k) =>
-      if i == j
-      then (j, k) ∈ s i -- Here we hard-code stubbornness :-)
-      else (j, k) ∈ resultSet i s σ
-  | s, σ, .Con φ ψ => eval s σ φ ∧ eval s σ ψ
-  | s, σ, .K i φ => ∀ t, ∀ τ , (he : equiv i (s,⟨σ,rfl⟩) (t,τ)) → eval t τ φ
+  | ι, σ, .Neg φ => ¬ eval ι σ φ
+  | ι, σ, .S a (j, k) =>
+      if a == j
+      then (j, k) ∈ ι a -- Here we hard-code stubbornness :-)
+      else (j, k) ∈ resultSet a ι σ
+  | ι, σ, .Con φ ψ => eval ι σ φ ∧ eval ι σ ψ
+  | ι, σ, .K a φ => ∀ t, ∀ τ , (he : equiv a (ι,⟨σ,rfl⟩) (t,τ)) → eval t τ φ
 termination_by
   _ σ φ => (σ.length, φ.length)
 decreasing_by -- Sequence (length) stays the same, but formula becomes simpler in all cases.
@@ -164,3 +184,40 @@ decreasing_by -- Sequence (length) stays the same, but formula becomes simpler i
     simp_wf
 
 end
+
+notation ι:arg "⌈" σ:arg "⌉" a:arg => resultSet a ι σ
+
+/-- An abbreviation to easily say that we have the same length and (can thus say) `equiv`. -/
+def equi (a : Agent) (ισ : Dist × Sequence) (ι'τ : Dist × Sequence) : Prop :=
+  ∃ h : ισ.2.length = ι'τ.2.length, equiv a ⟨ισ.1, ⟨ισ.2, rfl⟩⟩ ⟨ι'τ.1, ⟨ι'τ.2, h.symm⟩⟩
+
+notation ισ:arg " ~_ " a:arg ι'τ:arg => equi a ισ ι'τ
+
+notation ι σ "⊧" φ => eval ι σ φ
+
+/-- Validity of formulas -/
+def valid (φ : Form) := ∀ ι σ, eval ι σ φ
+prefix:100 "⊨" => valid -- FIXME what's a good precedence value here?
+
+/-- Lemma 7 -/
+lemma indistinguishable_then_same_values {ι ι': Dist} {σ τ : Sequence} :
+    (ι, σ) ~_a (ι', τ)  →  ι⌈σ⌉a = ι'⌈τ⌉a := by
+  intro equ
+  sorry
+
+/-- Lemma 8. Note that `v` here says whether we have b or \overline{b}. -/
+lemma local_is_known {a b : Agent} (v : Bool) :
+      ⊨ ((S a ⟨b,v⟩) ⟹ (K a (S a ⟨b,v⟩)))
+    ∧ ⊨ ((Neg (S a ⟨b,true⟩)) ⟹ (K a (S a ⟨b,true⟩)))
+    := by
+  sorry
+
+/-- Lemma 9 -/
+lemma knowledge_of_secrets_is_preserved {a b : Agent} {v : Bool} :
+    (ι σ ⊧ Kv a b)
+    ∧
+    (σ ⊑ τ)
+    →
+    (ι σ ⊧ Kv a b)
+    := by
+  sorry
