@@ -249,6 +249,42 @@ lemma equiv_refl : equiv (a : Agent) (ι, σ) (ι, σ) := by
     simp
     cases roleOfIn a _ <;> simp_all <;> apply equiv_refl
 
+lemma equiv_symm {a n ι σ} {h1 : σ.length = n} {κ τ h2} :
+      equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩)
+    ↔ equiv a (κ, ⟨τ, h2⟩) (ι, ⟨σ, h1⟩) := by
+  induction σ generalizing n τ
+  · simp at h1
+    subst h1
+    simp at h2
+    subst h2
+    simp at *
+    grind
+  case cons C σ IH =>
+    -- also take apart τ here next
+    cases C
+    all_goals
+      unfold equiv
+      simp
+      sorry
+
+lemma equiv_trans {a n ι σ} {h1 : σ.length = n} {κ τ h2 η ρ h3} :
+      equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩)
+    → equiv a (κ, ⟨τ, h2⟩) (η, ⟨ρ, h3⟩)
+    → equiv a (ι, ⟨σ, h1⟩) (η, ⟨ρ, h3⟩) := by
+  intro ha hb
+  induction σ
+  · simp at h1
+    subst h1
+    simp at h2 h3
+    subst h2 h3
+    simp at *
+    grind
+  case cons IH =>
+    -- really need induction here?!?!
+    unfold equiv at *
+    simp at *
+    sorry
+
 /-- Agents know their own initial state. -/
 lemma true_of_knowldege {ι σ a φ} :
     eval ι σ (K a φ) → eval ι σ φ := by
@@ -332,18 +368,22 @@ lemma stubbornness n σ (h : σ.length = n) :
       rcases rh with ⟨rh1,rh2⟩
       rw [IH _ h]
 
-lemma same_set_then_know_same
-    (same_set : ι⌈σ'⌉b = ι'⌈τ'⌉b) (same_len : σ'.length = τ'.length)
-    : eval ι' τ' (K b (S a (a, v))) ↔ eval ι σ' (K b (S a (a, v))) := by
+lemma equiv_then_know_same {a n ι σ} {h1 : σ.length = n} {κ τ h2}
+    (equ : equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩))
+    φ
+    : eval ι σ (K a φ) ↔ eval κ τ (K a φ) := by
   unfold eval
   simp
-  simp_rw [stubbornness]
   constructor
-  · intro hyp κ ρ same_len equ
-    specialize hyp κ ρ (by aesop)
-    -- is this actually true???
-    sorry
-  · sorry
+  · intro hyp η ρ same_len equ'
+    apply hyp η ρ (by aesop)
+    have := @equiv_trans a n ι σ h1 κ τ h2 η ρ (by grind) equ (by convert equ'; grind)
+    convert this
+  · intro hyp η ρ same_len equ'
+    apply hyp η ρ (by aesop)
+    rw [equiv_symm] at equ
+    have := @equiv_trans a n κ τ h2 ι σ  h1 η ρ (by grind) equ (by convert equ'; grind)
+    convert this
 
 /-- Lemma 7 -/
 lemma indistinguishable_then_same_values {ι ι': Dist} {σ τ : Sequence} :
@@ -354,19 +394,19 @@ lemma indistinguishable_then_same_values {ι ι': Dist} {σ τ : Sequence} :
   case nil =>
     have := List.length_eq_zero_iff.mp same_len.symm
     aesop
-  case cons κ σ' IH =>
+  case cons C σ' IH =>
     simp at same_len
-    rcases List.exists_cons_of_length_eq_add_one same_len.symm with ⟨κ', τ', τ_def⟩
-    subst (τ_def : τ = κ' :: τ')
+    rcases List.exists_cons_of_length_eq_add_one same_len.symm with ⟨Cτ, τ', τ_def⟩
+    subst τ_def
     simp only [List.length_cons, equiv, Nat.add_one_sub_one] at equ
     specialize IH (by grind) equ.1 -- IH now says `ι⌈σ'⌉a = ι'⌈τ'⌉a`
     -- distinguish cases whether a is involved in κ (and this also κ') or not
-    cases r : roleOfIn a κ
+    cases r : roleOfIn a C
     case Caller =>
       simp [r] at equ
       rcases equ with ⟨prev_equ, Caller_eq, prev_same_contrib, same_pair⟩
       unfold contribSet at prev_same_contrib
-      cases κ <;> cases κ' <;> simp [Call.pair, roleOfIn_eq_Caller_iff] at *
+      cases C <;> cases Cτ <;> simp [Call.pair, roleOfIn_eq_Caller_iff] at *
       all_goals
         rcases same_pair with ⟨_,_⟩
         subst_eqs
@@ -382,25 +422,55 @@ lemma indistinguishable_then_same_values {ι ι': Dist} {σ τ : Sequence} :
         · intro hyp; convert hyp using 2
           · aesop
           · aesop
-          · rcases x with ⟨v,b⟩
-            cases b <;> simp
+          · rcases x with ⟨b,k⟩
+            cases k <;> simp
             all_goals
-              rw [same_set_then_know_same] <;> tauto
+              exact (equiv_then_know_same prev_equ (S b (b, _))).symm
         · intro hyp; convert hyp using 2
           · aesop
-          · rcases x with ⟨v,b⟩
-            cases b <;> simp [Set.instMembership, Set.Mem]
+          · aesop
+          · rcases x with ⟨b,k⟩
+            cases k <;> simp
             all_goals
-              sorry
-              -- rw [same_set_then_know_same] <;> tauto
-          · sorry -- via extra lemma equiv_trans etc?
+              apply equiv_then_know_same prev_equ
+      case normal.fstE b c =>
+        simp at same_len
+        unfold resultSet
+        rw [← Caller_eq]
+        clear Caller_eq
+        simp
+        -- same form here
+        ext x
+        simp
+        constructor
+        · intro hyp; convert hyp using 2
+          · aesop
+          · aesop
+          · rcases x with ⟨b,k⟩
+            cases k <;> simp
+            all_goals
+              exact (equiv_then_know_same prev_equ (S b (b, _))).symm
+        · intro hyp; convert hyp using 2
+          · aesop
+          · aesop
+          · rcases x with ⟨b,k⟩
+            cases k <;> simp
+            all_goals
+              apply equiv_then_know_same prev_equ
       all_goals
-        -- 8 more cases ... can we do this in a more general helper lemma?
+        -- 8 more cases, and then again when a is Callee?
+        -- ... can we do this in a more general helper lemma?
         sorry
     case Callee =>
       sorry
     case Other =>
-      sorry
+      unfold resultSet
+      rw [r]
+      rw [equ.2.1] at r
+      rw [r]
+      -- IDEA lemma something like "sameRole_of_equiv" here?
+      simp
+      exact IH
 
 /-- Lemma 8. Note that `v` here says whether we have b or \overline{b}. -/
 lemma local_is_known {a b : Agent} (v : Bool) :
