@@ -237,6 +237,12 @@ prefix:100 "⊨" => valid -- FIXME what's a good precedence value here?
 
 /-! ## Properties of the Semantics -/
 
+lemma sameRole_of_equiv :
+    equiv a (ι, ⟨C₁ :: σ, h1⟩) (κ, ⟨C₂ :: τ, h2⟩) →
+    roleOfIn a C₁ = roleOfIn a C₂ := by
+  unfold equiv
+  simp_all
+
 lemma equiv_refl : equiv (a : Agent) (ι, σ) (ι, σ) := by
   unfold equiv
   split
@@ -249,9 +255,9 @@ lemma equiv_refl : equiv (a : Agent) (ι, σ) (ι, σ) := by
     simp
     cases roleOfIn a _ <;> simp_all <;> apply equiv_refl
 
-lemma equiv_symm {a n ι σ} {h1 : σ.length = n} {κ τ h2} :
-      equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩)
-    ↔ equiv a (κ, ⟨τ, h2⟩) (ι, ⟨σ, h1⟩) := by
+lemma equiv_symm {i n ι σ} {h1 : σ.length = n} {κ τ h2} :
+      equiv i (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩)
+    ↔ equiv i (κ, ⟨τ, h2⟩) (ι, ⟨σ, h1⟩) := by
   induction σ generalizing n τ
   · simp at h1
     subst h1
@@ -259,31 +265,49 @@ lemma equiv_symm {a n ι σ} {h1 : σ.length = n} {κ τ h2} :
     subst h2
     simp at *
     grind
-  case cons C σ IH =>
-    -- also take apart τ here next
-    cases C
-    all_goals
-      unfold equiv
-      simp
-      sorry
+  case cons C₁ σ IH =>
+    simp at h1
+    subst h1
+    rcases List.exists_cons_of_length_eq_add_one h2 with ⟨C₂, τ, τ_def⟩
+    subst τ_def
+    simp at h2
+    unfold equiv
+    rw [IH]
+    grind
 
 lemma equiv_trans {a n ι σ} {h1 : σ.length = n} {κ τ h2 η ρ h3} :
       equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩)
     → equiv a (κ, ⟨τ, h2⟩) (η, ⟨ρ, h3⟩)
     → equiv a (ι, ⟨σ, h1⟩) (η, ⟨ρ, h3⟩) := by
   intro ha hb
-  induction σ
+  induction σ generalizing n ι κ τ η ρ
   · simp at h1
     subst h1
     simp at h2 h3
     subst h2 h3
     simp at *
     grind
-  case cons IH =>
-    -- really need induction here?!?!
-    unfold equiv at *
-    simp at *
-    sorry
+  case cons C₁ σ IH =>
+    simp at h1
+    subst h1
+    rcases List.exists_cons_of_length_eq_add_one h2 with ⟨C₂, τ, τ_def⟩
+    subst τ_def
+    simp at h2
+    rcases List.exists_cons_of_length_eq_add_one h3 with ⟨C₃, η, η_def⟩
+    subst η_def
+    simp at h3
+    unfold equiv
+    refine ⟨?_, ?_, ?_⟩
+    · simp [equiv] at ha
+      simp [equiv] at hb
+      apply IH ha.1 hb.1
+    · rw [sameRole_of_equiv ha, sameRole_of_equiv hb]
+    · grind [equiv]
+
+instance : Equivalence (@equiv k i) :=
+  ⟨ fun _ => equiv_refl
+  , equiv_symm.mp
+  , equiv_trans ⟩
 
 /-- Agents know their own initial state. -/
 lemma true_of_knowldege {ι σ a φ} :
@@ -307,8 +331,7 @@ lemma know_self n σ τ (h1 : σ.length = n) (h2 : τ.length = n) :
     cases h : roleOfIn a c1 <;> aesop
 
 /-- Agents are stubborn about their own secrets. -/
-lemma stubbornness n σ (h : σ.length = n) :
-    eval ι σ (S a (a, k)) ↔ ι a = k := by
+lemma stubbornness n σ (h : σ.length = n) : eval ι σ (S a (a, k)) ↔ ι a = k := by
   simp [eval]
   induction n generalizing σ k ι
   case zero =>
@@ -386,11 +409,11 @@ lemma equiv_then_know_same {a n ι σ} {h1 : σ.length = n} {κ τ h2}
     convert this
 
 /-- Lemma 7 -/
-lemma indistinguishable_then_same_values {ι ι': Dist} {σ τ : Sequence} :
-    (ι, σ) ~_a (ι', τ)  →  ι⌈σ⌉a = ι'⌈τ⌉a := by
+lemma indistinguishable_then_same_values {ι ι': Dist} {σ k : Sequence} :
+    (ι, σ) ~_a (ι', k)  →  ι⌈σ⌉a = ι'⌈k⌉a := by
   intro ⟨same_len, equ⟩
   simp at same_len
-  induction σ generalizing τ
+  induction σ generalizing k
   case nil =>
     have := List.length_eq_zero_iff.mp same_len.symm
     aesop
@@ -410,71 +433,34 @@ lemma indistinguishable_then_same_values {ι ι': Dist} {σ τ : Sequence} :
       all_goals
         rcases same_pair with ⟨_,_⟩
         subst_eqs
-      -- 6 cases should drop out here?
-      case normal.normal =>
         simp at same_len
-        clear Caller_eq -- useless?
-        unfold resultSet
-        simp
-        ext x
-        simp
-        constructor
-        · intro hyp; convert hyp using 2
-          · aesop
-          · aesop
-          · rcases x with ⟨b,k⟩
-            cases k <;> simp
-            all_goals
-              exact (equiv_then_know_same prev_equ (S b (b, _))).symm
-        · intro hyp; convert hyp using 2
-          · aesop
-          · aesop
-          · rcases x with ⟨b,k⟩
-            cases k <;> simp
-            all_goals
-              apply equiv_then_know_same prev_equ
-      case normal.fstE b c =>
-        simp at same_len
-        unfold resultSet
-        rw [← Caller_eq]
         clear Caller_eq
-        simp
-        -- same form here
-        ext x
-        simp
-        constructor
-        · intro hyp; convert hyp using 2
-          · aesop
-          · aesop
-          · rcases x with ⟨b,k⟩
-            cases k <;> simp
-            all_goals
-              exact (equiv_then_know_same prev_equ (S b (b, _))).symm
-        · intro hyp; convert hyp using 2
-          · aesop
-          · aesop
-          · rcases x with ⟨b,k⟩
-            cases k <;> simp
-            all_goals
-              apply equiv_then_know_same prev_equ
-      all_goals
-        -- 8 more cases, and then again when a is Callee?
-        -- ... can we do this in a more general helper lemma?
-        sorry
+        simp [resultSet]
+        grind [equiv_then_know_same, roleOfIn_a]
     case Callee =>
-      sorry
+      simp [r] at equ
+      rcases equ with ⟨prev_equ, Callee_eq, prev_same_contrib, same_pair⟩
+      unfold contribSet at prev_same_contrib
+      cases C <;> cases Cτ <;> simp [Call.pair, roleOfIn_eq_Callee_iff] at *
+        <;> rcases r with ⟨not_a, h⟩ <;> subst h
+      all_goals
+        rcases same_pair with ⟨_,_⟩
+        subst_eqs
+        simp at same_len
+        clear Callee_eq
+        simp [resultSet, not_a]
+        grind [equiv_then_know_same, roleOfIn_a]
     case Other =>
       unfold resultSet
       rw [r]
       rw [equ.2.1] at r
       rw [r]
-      -- IDEA lemma something like "sameRole_of_equiv" here?
       simp
       exact IH
 
-/-- Lemma 8. Note that `v` here says whether we have b or \overline{b}. -/
-lemma local_is_known {a b : Agent} (v : Bool) :
-      ⊨ ((S a ⟨b,v⟩) ⟹ (K a (S a ⟨b,v⟩)))
+/-- Lemma 8. Note that `k` here says whether we have b or \overline{b}. -/
+lemma local_is_known {a b : Agent} (k : Bool) :
+      ⊨ ((S a ⟨b,k⟩) ⟹ (K a (S a ⟨b,k⟩)))
     ∧ ⊨ ((Neg (S a ⟨b,true⟩)) ⟹ (K a (S a ⟨b,true⟩)))
     := by
   sorry
