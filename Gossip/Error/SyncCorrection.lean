@@ -65,11 +65,16 @@ def invert : Agent -> Set Value -> Set Value
 
 /-- (Def 3) Logical language -/
 inductive Form : Type
+  /-- True constant -/
   | Top : Form -- ⊤
-  | Con : Form → Form → Form -- ∧
-  | Neg : Form → Form -- ¬
-  | S : (a : Agent) → (Agent × Bool) → Form -- S a (b, k) means agent a has value k of agent b
-  | K : (a : Agent) → (φ : Form) → Form -- knowing that
+  /-- Conjunction -/
+  | Con : Form → Form → Form
+  /-- Negation -/
+  | Neg : Form → Form
+  /-- `S a (b, k)` means agent `a` has value `k` of agent `b`. -/
+  | S : (a : Agent) → Value → Form
+  /-- `K a φ` means agent `a` knows that `φ` is true. -/
+  | K : (a : Agent) → (φ : Form) → Form
 
 open Form
 
@@ -458,26 +463,80 @@ lemma indistinguishable_then_same_values {ι ι': Dist} {σ k : Sequence} :
       simp
       exact IH
 
-/-- Lemma 8. Note that `k` here says whether we have b or \overline{b}. -/
+/-- Lemma 8. The truth value of any "a has ..." atom is known by a.
+Note that `k` here says whether we have b or \overline{b}. -/
 lemma local_is_known {a b : Agent} (k : Bool) :
-      ⊨ ((S a ⟨b,k⟩) ⟹ (K a (S a ⟨b,k⟩)))
-    ∧ ⊨ ((Neg (S a ⟨b,true⟩)) ⟹ (K a (S a ⟨b,true⟩)))
-    := by
-  sorry
+      ⊨ ((     S a ⟨b,k⟩ ) ⟹ (K a (     S a ⟨b,k⟩) ))
+    ∧ ⊨ ((Neg (S a ⟨b,k⟩)) ⟹ (K a (Neg (S a ⟨b,k⟩)))) := by
+  constructor
+  all_goals
+  · simp [valid, eval]
+    intro ι σ bk_in κ τ same_len equ
+    have := indistinguishable_then_same_values ⟨?_, equ⟩ -- using Lemma 7
+    <;> grind
 
-/-- Lemma 9 -/
-lemma knowledge_of_secrets_is_preserved {a b : Agent} {v : Bool} :
-    ((ι,σ) ⊧ Kv a b)
-    ∧
-    (σ ⊑ τ)
-    →
-    ((ι,σ) ⊧ Kv a b)
-    := by
-  sorry
+/-- Helper for Lemma 9, stronger version using a specific `k` and not `Kv`. -/
+lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
+    (hKv : (ι, σ) ⊧ K a (S b (b, k)))
+    (hSub : σ ⊑ τ)
+    : (ι, τ) ⊧ K a (S b (b, k)) := by
+  rcases hSub with ⟨ρ, def_τ⟩ -- the `ρ` is called `τ \ σ` in the paper.
+  induction ρ generalizing σ τ ι
+  · simp_all
+  case cons C ρ IH =>
+    subst def_τ
+    simp only [forall_apply_eq_imp_iff] at IH
+    simp only at hKv
+    simp only [List.cons_append]
+    unfold eval
+    simp only [List.length_cons, Subtype.forall, List.length_append]
+    intro κ τ same_len1 equ
+    -- The usual trick to split a list. Used so often, maybe make it a custom named tactic?
+    rcases List.exists_cons_of_length_eq_add_one same_len1 with ⟨Cτ, τ, τ_def⟩
+    subst τ_def
+    specialize @IH ι σ hKv
+    rw [stubbornness _ _ same_len1]
+    unfold equiv at equ
+    have know_same := equiv_then_know_same equ.1 (S b (b, k))
+    rw [know_same] at IH
+    have := true_of_knowldege IH
+    simp only at this
+    rw [stubbornness _ _ rfl] at this
+    assumption
 
-/-- Lemma 10 -/
+/-- Lemma 9. Knowledge of secrets is preserved. -/
+lemma knowledge_of_secrets_is_preserved {a b : Agent}
+    (hKv : (ι, σ) ⊧ Kv a b) (hSub : σ ⊑ τ) : ((ι, τ) ⊧ Kv a b) := by
+  unfold eval eval eval at hKv
+  rw [← or_iff_not_and_not] at hKv
+  simp only at hKv
+  unfold eval eval eval
+  rw [← or_iff_not_and_not]
+  simp only
+  rcases hKv with (h|h)
+  · left
+    exact @knowledge_of_secrets_is_preserved' ι σ τ a b true h hSub
+  · right
+    exact @knowledge_of_secrets_is_preserved' ι σ τ a b false h hSub
+
+/-- Lemma 10. Agents know their own value. Follows from `stubbornness`. -/
 lemma know_your_own : ⊨ Kv a a := by
-  sorry
+  intro ι σ
+  unfold eval eval eval
+  rw [← @or_iff_not_and_not]
+  cases h : ι a
+  · right
+    unfold eval
+    simp_rw [stubbornness]
+    intro κ ⟨τ, same_len⟩ equ
+    rw [know_self _ _ _ _ _ equ] at h
+    exact h
+  · left
+    unfold eval
+    simp_rw [stubbornness]
+    intro κ ⟨τ, same_len⟩ equ
+    rw [know_self _ _ _ _ _ equ] at h
+    exact h
 
 /-!
 
