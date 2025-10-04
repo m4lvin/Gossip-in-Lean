@@ -260,10 +260,10 @@ lemma equiv_refl : equiv (a : Agent) (ι, σ) (ι, σ) := by
     simp
     cases roleOfIn a _ <;> simp_all <;> apply equiv_refl
 
-lemma equiv_symm {i n ι σ} {h1 : σ.length = n} {κ τ h2} :
+lemma equiv_symm {i m ι σ} {h1 : σ.length = m} {κ τ h2} :
       equiv i (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩)
     ↔ equiv i (κ, ⟨τ, h2⟩) (ι, ⟨σ, h1⟩) := by
-  induction σ generalizing n τ
+  induction σ generalizing m τ
   · simp at h1
     subst h1
     simp at h2
@@ -280,12 +280,12 @@ lemma equiv_symm {i n ι σ} {h1 : σ.length = n} {κ τ h2} :
     rw [IH]
     grind
 
-lemma equiv_trans {a n ι σ} {h1 : σ.length = n} {κ τ h2 η ρ h3} :
+lemma equiv_trans {a m ι σ} {h1 : σ.length = m} {κ τ h2 η ρ h3} :
       equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩)
     → equiv a (κ, ⟨τ, h2⟩) (η, ⟨ρ, h3⟩)
     → equiv a (ι, ⟨σ, h1⟩) (η, ⟨ρ, h3⟩) := by
   intro ha hb
-  induction σ generalizing n ι κ τ η ρ
+  induction σ generalizing m ι κ τ η ρ
   · simp at h1
     subst h1
     simp at h2 h3
@@ -322,9 +322,9 @@ lemma true_of_knowldege {ι σ a φ} :
   exact hyp ι σ rfl equiv_refl
 
 /-- Agents know their own initial state. -/
-lemma know_self n σ τ (h1 : σ.length = n) (h2 : τ.length = n) :
+lemma know_self m σ τ (h1 : σ.length = m) (h2 : τ.length = m) :
     equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩) → ι a = κ a  := by
-  induction n generalizing ι κ σ τ
+  induction m generalizing ι κ σ τ
   · rw [List.length_eq_zero_iff] at h1
     rw [List.length_eq_zero_iff] at h2
     subst h1 h2
@@ -336,15 +336,15 @@ lemma know_self n σ τ (h1 : σ.length = n) (h2 : τ.length = n) :
     cases h : roleOfIn a c1 <;> aesop
 
 /-- Agents are stubborn about their own secrets. -/
-lemma stubbornness n σ (h : σ.length = n) : eval ι σ (S a (a, k)) ↔ ι a = k := by
+lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a = k := by
   simp [eval]
-  induction n generalizing σ k ι
+  induction m generalizing σ k ι
   case zero =>
     rw [List.length_eq_zero_iff] at h
     subst h
     simp
     grind
-  case succ n IH =>
+  case succ m IH =>
     rcases List.exists_cons_of_length_eq_add_one h with ⟨c, σ, σ_def⟩
     subst σ_def
     unfold resultSet
@@ -396,7 +396,7 @@ lemma stubbornness n σ (h : σ.length = n) : eval ι σ (S a (a, k)) ↔ ι a =
       rcases rh with ⟨rh1,rh2⟩
       rw [IH _ h]
 
-lemma equiv_then_know_same {a n ι σ} {h1 : σ.length = n} {κ τ h2}
+lemma equiv_then_know_same {a m ι σ} {h1 : σ.length = m} {κ τ h2}
     (equ : equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩))
     φ
     : eval ι σ (K a φ) ↔ eval κ τ (K a φ) := by
@@ -405,12 +405,12 @@ lemma equiv_then_know_same {a n ι σ} {h1 : σ.length = n} {κ τ h2}
   constructor
   · intro hyp η ρ same_len equ'
     apply hyp η ρ (by aesop)
-    have := @equiv_trans a n ι σ h1 κ τ h2 η ρ (by grind) equ (by convert equ'; grind)
+    have := @equiv_trans a m ι σ h1 κ τ h2 η ρ (by grind) equ (by convert equ'; grind)
     convert this
   · intro hyp η ρ same_len equ'
     apply hyp η ρ (by aesop)
     rw [equiv_symm] at equ
-    have := @equiv_trans a n κ τ h2 ι σ  h1 η ρ (by grind) equ (by convert equ'; grind)
+    have := @equiv_trans a m κ τ h2 ι σ  h1 η ρ (by grind) equ (by convert equ'; grind)
     convert this
 
 /-- Lemma 7 -/
