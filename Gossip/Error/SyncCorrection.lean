@@ -8,23 +8,26 @@ namespace Error
 
 /-! ## Basics
 
-Here we define: agents, values, calls, sequents.
+Here we define: agents, values, distributions, calls, sequents.
+
+We use `n` for the number of agents.
 -/
+variable {n : Nat}
 
-abbrev Agent := Nat -- IDEA use `Fin n` with `variable {n : Nat}` later
+abbrev Agent : Type := Fin n
 
-abbrev Value := (Agent × Bool) -- using Bool instead of 0 and 1
+abbrev Value : Type := (@Agent n × Bool) -- using Bool instead of 0 and 1
 
 -- We allow to write "a" for "(a, 1)", meaning NOT "(a, 0)" as in paper at the moment.
-instance : Coe Agent Value := ⟨fun a => ⟨a,true⟩⟩
+instance : Coe (@Agent n) (@Value n) := ⟨fun a => ⟨a,true⟩⟩
 
 /-- An *initial* secret distribution, each agent only has their own value. -/
-abbrev Dist := Agent → Bool
+abbrev Dist := @Agent n → Bool
 
 inductive Call : Type
-  | normal : (caller : Agent) → (callee : Agent) → Call -- a b
-  | fstE : (caller : Agent) → (err : Agent) → (callee : Agent) → Call -- a^c b
-  | sndE : (caller : Agent) → (callee : Agent) → (err : Agent) → Call -- a b^c
+  | normal : (caller : @Agent n) → (callee : @Agent n) → Call -- a b
+  | fstE : (caller : @Agent n) → (err : @Agent n) → (callee : @Agent n) → Call -- a^c b
+  | sndE : (caller : @Agent n) → (callee : @Agent n) → (err : @Agent n) → Call -- a b^c
 
 -- Nicer notation for `Call`
 notation "⌜" a:arg  b:arg "⌝" => Call.normal a b
@@ -32,17 +35,19 @@ notation "⌜" a:arg "^" c:arg b:arg "⌝" => Call.fstE a c b
 notation "⌜"  a:arg b:arg "^" c:arg "⌝" => Call.sndE a b c
 
 /-- The pair of agents in the call, ignoring whether an error is made. -/
-def Call.pair : Call → (Agent × Agent)
+def Call.pair : @Call n → (@Agent n × @Agent n)
   | ⌜ a   b   ⌝ => (a , b)
   | ⌜ a^_ b   ⌝ => (a , b)
   | ⌜ a   b^_ ⌝ => (a , b)
 
-instance instMembershipAgentCall : Membership Agent Call := .mk $ fun c i => match c with
+-- unused
+instance instMembershipAgentCall : Membership (@Agent n) (@Call n) := .mk $ fun c i => match c with
   | ⌜ a   b   ⌝ => i = a ∨ i = b
   | ⌜ a^_ b   ⌝ => i = a ∨ i = b
   | ⌜ a   b^_ ⌝ => i = a ∨ i = b
 
-instance {a : Agent} {c : Call} : Decidable (a ∈ c) := by
+-- unused
+instance {a : @Agent n} {c : @Call n} : Decidable (a ∈ c) := by
   rcases c with (⟨d,e⟩|⟨d,_,e⟩|⟨d,e,_⟩) <;> by_cases a = d <;> by_cases a = e
   all_goals
     simp_all [instMembershipAgentCall]
@@ -51,14 +56,14 @@ instance {a : Agent} {c : Call} : Decidable (a ∈ c) := by
 
 /-- (Def 2) A sequence of calls.
 For easier pattern matching this is in *reverse* order, i.e. the newest call is the first element. -/
-abbrev Sequence : Type := List Call
+abbrev Sequence : Type := List (@Call n)
 
 /-- Subsequence relation: τ extends σ.
 Because the lists are with the newest call first, this can be defined as saying that σ is a suffix of tau. -/
 notation σ:arg "⊑" τ:arg => σ <:+ τ
 
 /-- Flip the value of the secret of this agent in the given set. -/
-def invert : Agent -> Set Value -> Set Value
+def invert : (@Agent n) -> Set (@Value n) -> Set (@Value n)
   | i, vs => vs.image (fun (j,b) => if j = i then (j, not b) else (j,b))
 
 /-! ## Syntax -/
@@ -72,9 +77,9 @@ inductive Form : Type
   /-- Negation -/
   | Neg : Form → Form
   /-- `S a (b, k)` means agent `a` has value `k` of agent `b`. -/
-  | S : (a : Agent) → Value → Form
+  | S : (a : @Agent n) → (@Value n) → Form
   /-- `K a φ` means agent `a` knows that `φ` is true. -/
-  | K : (a : Agent) → (φ : Form) → Form
+  | K : (a : @Agent n) → (φ : Form) → Form
 
 open Form
 
@@ -86,7 +91,7 @@ notation φ1:arg "⟹" φ2:arg => (Neg φ1) ⋁ φ2
 notation "Kv" a:arg b:arg => (K a (S b (b, true))) ⋁ (K a (S b (b,false)))
 
 @[simp]
-def Form.length : Form → Nat
+def Form.length : @Form n → Nat
   | Top => 0
   | Con φ1 φ2 => 1 + φ1.length + φ2.length
   | Neg φ => 1 + φ.length
@@ -103,7 +108,7 @@ deriving DecidableEq
 open Role
 
 /-- What is the `Role` of `i` in this call? -/
-def roleOfIn (i : Agent) : (c : Call) → Role
+def roleOfIn (i : @Agent n) : (c : @Call n) → Role
   | ⌜ a   b   ⌝ => if i = a then Caller else if i = b then Callee else Other
   | ⌜ a^_ b   ⌝ => if i = a then Caller else if i = b then Callee else Other
   | ⌜ a   b^_ ⌝ => if i = a then Caller else if i = b then Callee else Other
@@ -138,7 +143,7 @@ mutual
 
 /-- (Def 4) Semantics of call.
 What values does this agent have after this sequence? -/
-def resultSet (i : Agent) : Dist → Sequence → Set Value
+def resultSet (i : @Agent n) : @Dist n → @Sequence n → Set (@Value n)
   | ι, [] => { (i, ι i) } -- for the basis, ι[ε] = ι
   | ι, (C :: σ) =>
     /- (*) Which values did `i` already know to be wrong at state (ι,σ)? -/
@@ -162,7 +167,7 @@ decreasing_by
     apply Prod.Lex.left; simp -- sequence becomes shorter in all recursive calls!
 
 /-- Right after sequence `σ`, what values will caller and callee contribute to the call? -/
-def contribSet (ι : Dist) (σ : Sequence) : Call → Set Value × Set Value
+def contribSet (ι : @Dist n) (σ : @Sequence n) : @Call n → Set (@Value n) × Set (@Value n)
   | ⌜ a   b   ⌝ => (resultSet a ι σ           ,            resultSet b ι σ)
   | ⌜ a^c b   ⌝ => (invert c $ resultSet a ι σ,            resultSet b ι σ)
   | ⌜ a   b^c ⌝ => (resultSet a ι σ           , invert c $ resultSet b ι σ)
@@ -174,8 +179,8 @@ decreasing_by
 
 /-- (Def 5) Observation relation.
 This is *synchronous*. -/
-def equiv {k} (a : Agent) :
-    (Dist × {σ : Sequence // σ.length = k}) → (Dist × {σ : Sequence // σ.length = k}) → Prop
+def equiv {k} (a : @Agent n) :
+    (@Dist n × {σ : @Sequence n // σ.length = k}) → (@Dist n × {σ : @Sequence n // σ.length = k}) → Prop
   | (ι, ⟨[]    ,_⟩), (ι', ⟨[]    ,_⟩) => ι a = ι' a
   | (ι, ⟨C :: σ,_⟩), (ι', ⟨D :: τ,_⟩) =>
                           @equiv (k-1) a (ι,⟨σ, by aesop⟩) (ι',⟨τ, by aesop⟩)
@@ -197,7 +202,7 @@ decreasing_by
     aesop
 
 /-- (Def 6) Semantics. -/
-def eval : Dist → Sequence → Form → Prop
+def eval : @Dist n → @Sequence n → @Form n → Prop
   | _, _, .Top => True
   | ι, σ, .Neg φ => ¬ eval ι σ φ
   | ι, σ, .S a (j, k) => (j, k) ∈ resultSet a ι σ
@@ -220,7 +225,7 @@ end
 notation ι:arg "⌈" σ:arg "⌉" a:arg => resultSet a ι σ
 
 @[simp]
-lemma resultSet_nil {ι i} : resultSet i ι []  = { (i, ι i) } := by simp [resultSet]
+lemma resultSet_nil {ι i} : @resultSet n i ι []  = { (i, ι i) } := by simp [resultSet]
 
 @[simp]
 lemma equiv_nil : equiv i (ι, ⟨[],h1⟩) (κ, ⟨[],h2⟩) ↔ ι i = κ i := by simp [equiv]
@@ -230,13 +235,13 @@ lemma equiv_nil : equiv i (ι, ⟨[],h1⟩) (κ, ⟨[],h2⟩) ↔ ι i = κ i :=
 notation ισ:100 "⊧" φ:100 => eval ισ.1 ισ.2 φ
 
 /-- An abbreviation to easily say that we have the same length and (can thus say) `equiv`. -/
-def equi (a : Agent) (ισ : Dist × Sequence) (ι'τ : Dist × Sequence) : Prop :=
+def equi (a : @Agent n) (ισ : @Dist n × @Sequence n) (ι'τ : @Dist n × @Sequence n) : Prop :=
   ∃ h : ισ.2.length = ι'τ.2.length, equiv a ⟨ισ.1, ⟨ισ.2, rfl⟩⟩ ⟨ι'τ.1, ⟨ι'τ.2, h.symm⟩⟩
 
 notation ισ:arg " ~_ " a:arg ι'τ:arg => equi a ισ ι'τ
 
 /-- Validity of formulas -/
-def valid (φ : Form) := ∀ ι σ, eval ι σ φ
+def valid (φ : @Form n) := ∀ ι σ, eval ι σ φ
 
 prefix:100 "⊨" => valid -- FIXME what's a good precedence value here?
 
@@ -260,7 +265,7 @@ lemma equiv_refl : equiv (a : Agent) (ι, σ) (ι, σ) := by
     simp
     cases roleOfIn a _ <;> simp_all <;> apply equiv_refl
 
-lemma equiv_symm {i m ι σ} {h1 : σ.length = m} {κ τ h2} :
+lemma equiv_symm {i m ι} {σ : @Sequence n} {h1 : σ.length = m} {κ τ h2} :
       equiv i (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩)
     ↔ equiv i (κ, ⟨τ, h2⟩) (ι, ⟨σ, h1⟩) := by
   induction σ generalizing m τ
@@ -280,7 +285,7 @@ lemma equiv_symm {i m ι σ} {h1 : σ.length = m} {κ τ h2} :
     rw [IH]
     grind
 
-lemma equiv_trans {a m ι σ} {h1 : σ.length = m} {κ τ h2 η ρ h3} :
+lemma equiv_trans {a m ι} {σ : @Sequence n} {h1 : σ.length = m} {κ τ h2 η ρ h3} :
       equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩)
     → equiv a (κ, ⟨τ, h2⟩) (η, ⟨ρ, h3⟩)
     → equiv a (ι, ⟨σ, h1⟩) (η, ⟨ρ, h3⟩) := by
@@ -309,13 +314,13 @@ lemma equiv_trans {a m ι σ} {h1 : σ.length = m} {κ τ h2 η ρ h3} :
     · rw [sameRole_of_equiv ha, sameRole_of_equiv hb]
     · grind [equiv]
 
-instance : Equivalence (@equiv k i) :=
+instance : Equivalence (@equiv n k i) :=
   ⟨ fun _ => equiv_refl
   , equiv_symm.mp
   , equiv_trans ⟩
 
 /-- Agents know their own initial state. -/
-lemma true_of_knowldege {ι σ a φ} :
+lemma true_of_knowldege {ι σ a} {φ : @Form n} :
     eval ι σ (K a φ) → eval ι σ φ := by
   intro hyp
   simp [eval] at hyp
@@ -396,7 +401,7 @@ lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a =
       rcases rh with ⟨rh1,rh2⟩
       rw [IH _ h]
 
-lemma equiv_then_know_same {a m ι σ} {h1 : σ.length = m} {κ τ h2}
+lemma equiv_then_know_same {a m ι} {σ : @Sequence n} {h1 : σ.length = m} {κ τ h2}
     (equ : equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩))
     φ
     : eval ι σ (K a φ) ↔ eval κ τ (K a φ) := by
@@ -405,12 +410,12 @@ lemma equiv_then_know_same {a m ι σ} {h1 : σ.length = m} {κ τ h2}
   constructor
   · intro hyp η ρ same_len equ'
     apply hyp η ρ (by aesop)
-    have := @equiv_trans a m ι σ h1 κ τ h2 η ρ (by grind) equ (by convert equ'; grind)
+    have := @equiv_trans n a m ι σ h1 κ τ h2 η ρ (by grind) equ (by convert equ'; grind)
     convert this
   · intro hyp η ρ same_len equ'
     apply hyp η ρ (by aesop)
     rw [equiv_symm] at equ
-    have := @equiv_trans a m κ τ h2 ι σ  h1 η ρ (by grind) equ (by convert equ'; grind)
+    have := @equiv_trans n a m κ τ h2 ι σ  h1 η ρ (by grind) equ (by convert equ'; grind)
     convert this
 
 /-- Lemma 7 -/
@@ -465,7 +470,7 @@ lemma indistinguishable_then_same_values {ι ι': Dist} {σ k : Sequence} :
 
 /-- Lemma 8. The truth value of any "a has ..." atom is known by a.
 Note that `k` here says whether we have b or \overline{b}. -/
-lemma local_is_known {a b : Agent} (k : Bool) :
+lemma local_is_known {a b : @Agent n} (k : Bool) :
       ⊨ ((     S a ⟨b,k⟩ ) ⟹ (K a (     S a ⟨b,k⟩) ))
     ∧ ⊨ ((Neg (S a ⟨b,k⟩)) ⟹ (K a (Neg (S a ⟨b,k⟩)))) := by
   constructor
@@ -505,7 +510,7 @@ lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
     assumption
 
 /-- Lemma 9. Knowledge of secrets is preserved. -/
-lemma knowledge_of_secrets_is_preserved {a b : Agent}
+lemma knowledge_of_secrets_is_preserved {a b : @Agent n}
     (hKv : (ι, σ) ⊧ Kv a b) (hSub : σ ⊑ τ) : ((ι, τ) ⊧ Kv a b) := by
   unfold eval eval eval at hKv
   rw [← or_iff_not_and_not] at hKv
@@ -515,9 +520,9 @@ lemma knowledge_of_secrets_is_preserved {a b : Agent}
   simp only
   rcases hKv with (h|h)
   · left
-    exact @knowledge_of_secrets_is_preserved' ι σ τ a b true h hSub
+    exact @knowledge_of_secrets_is_preserved' n ι σ τ a b true h hSub
   · right
-    exact @knowledge_of_secrets_is_preserved' ι σ τ a b false h hSub
+    exact @knowledge_of_secrets_is_preserved' n ι σ τ a b false h hSub
 
 /-- Lemma 10. Agents know their own value. Follows from `stubbornness`. -/
 lemma know_your_own : ⊨ Kv a a := by
