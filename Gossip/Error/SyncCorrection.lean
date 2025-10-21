@@ -137,7 +137,19 @@ lemma roleOfIn_sndE_eq_Callee_iff : roleOfIn a ⌜ x y^z ⌝ = Callee ↔ a ≠ 
 @[simp]
 lemma roleOfIn_sndE_eq_Other_iff : roleOfIn a ⌜ x y^z ⌝ = Other ↔ a ≠ x ∧ a ≠ y := by simp [roleOfIn]; grind
 
-/-! ## Semantics -/
+/-- Who is the other agent than `i` in this call? If `i` is not in the call, return caller. -/
+def other (i : @Agent n) : (c : @Call n) → @Agent n
+  | ⌜ a   b   ⌝ => if i = a then b else a
+  | ⌜ a^_ b   ⌝ => if i = a then b else a
+  | ⌜ a   b^_ ⌝ => if i = a then b else a
+
+
+/-! ## Semantics
+
+TODO:
+- actually ensure that at most one error may happen
+
+-/
 
 mutual
 
@@ -146,25 +158,32 @@ What values does this agent have after this sequence? -/
 def resultSet (i : @Agent n) : @Dist n → @Sequence n → Set (@Value n)
   | ι, [] => { (i, ι i) } -- for the basis, ι[ε] = ι
   | ι, (C :: σ) =>
-    /- (*) Which values did `i` already know to be wrong at state (ι,σ)? -/
-    let rejected : Set Value := { ⟨j, b⟩ | eval ι σ (K i (S j (j, !b))) }
+    /- (*) Values that `i` already knows to be wrong before the call (and can thus refuse). -/
+    let refuse : Set Value := { ⟨j, d⟩ | eval ι σ (K i (S j (j, !d))) }
+    /- (**) Values that `i` knows to be wrong after the call (and can thus delete). -/
+    let delete : Set Value := { ⟨j, d⟩ | ∀ ι' τ D, equiv i (ι,⟨σ,rfl⟩) (ι',τ)
+                                -- paper: → resultSet (other i C) ι' σ = resultSet (other i C) ι' τ
+                                -- new version here also allowing other calls:
+                                          → roleOfIn i C = roleOfIn i D
+                                          → contribSet ι' σ C = contribSet ι' τ D
+                                          → eval ι' τ (S j (j, !d)) }
     match C, roleOfIn i C with
       -- Not involved:
       | _, Other => resultSet i ι σ
-       -- Normal calls
-      | ⌜ a b ⌝, Caller => (resultSet a ι σ ∪ resultSet b ι σ) \ rejected
-      | ⌜ a b ⌝, Callee => (resultSet a ι σ ∪ resultSet b ι σ) \ rejected
-      -- error from a:
-      | ⌜ a^_ b ⌝, Caller => (resultSet a ι σ ∪ resultSet b ι σ) \ rejected -- no self-error!
-      | ⌜ a^c b ⌝, Callee => (invert c (resultSet a ι σ) ∪ (resultSet b ι σ)) \ rejected
-      -- error from b:
-      | ⌜ a b^c ⌝, Caller => (resultSet a ι σ ∪ (invert c $ (resultSet b ι σ))) \ rejected
-      | ⌜ a b^_ ⌝, Callee => (resultSet a ι σ ∪ resultSet b ι σ) \ rejected -- no self-error!
+      -- Normal calls
+      | ⌜ a b ⌝, Caller => ((resultSet a ι σ ∪ resultSet b ι σ) \ refuse) \ delete
+      | ⌜ a b ⌝, Callee => ((resultSet a ι σ ∪ resultSet b ι σ) \ refuse) \ delete
+      -- error from a (but not for a itself)
+      | ⌜ a^_ b ⌝, Caller => ((          resultSet a ι σ  ∪ resultSet b ι σ) \ refuse) \ delete
+      | ⌜ a^c b ⌝, Callee => ((invert c (resultSet a ι σ) ∪ resultSet b ι σ) \ refuse) \ delete
+      -- error from b (but not for b itself)
+      | ⌜ a b^c ⌝, Caller => ((resultSet a ι σ ∪ invert c (resultSet b ι σ)) \ refuse) \ delete
+      | ⌜ a b^_ ⌝, Callee => ((resultSet a ι σ ∪           resultSet b ι σ ) \ refuse) \ delete
 termination_by
   _ σ => (σ.length, 0) -- should be below contribSet
 decreasing_by
   all_goals
-    apply Prod.Lex.left; simp -- sequence becomes shorter in all recursive calls!
+    apply Prod.Lex.left; simp; try omega -- sequence becomes shorter in all recursive calls!
 
 /-- Right after sequence `σ`, what values will caller and callee contribute to the call? -/
 def contribSet (ι : @Dist n) (σ : @Sequence n) : @Call n → Set (@Value n) × Set (@Value n)
@@ -198,7 +217,6 @@ decreasing_by
   · apply Prod.Lex.left; simp
   all_goals
     apply Prod.Lex.left
-    have : σ.length = τ.length := by aesop
     aesop
 
 /-- (Def 6) Semantics. -/
@@ -239,6 +257,21 @@ def equi (a : @Agent n) (ισ : @Dist n × @Sequence n) (ι'τ : @Dist n × @Seq
   ∃ h : ισ.2.length = ι'τ.2.length, equiv a ⟨ισ.1, ⟨ισ.2, rfl⟩⟩ ⟨ι'τ.1, ⟨ι'τ.2, h.symm⟩⟩
 
 notation ισ:arg " ~_ " a:arg ι'τ:arg => equi a ισ ι'τ
+
+lemma equi_of_equiv :
+    equiv a ⟨ι, ⟨σ, h1⟩⟩ ⟨ι', ⟨τ, h2⟩⟩ → equi a ⟨ι,σ⟩ ⟨ι',τ⟩ := by
+  intro hyp
+  constructor
+  · simp
+    convert hyp
+  · linarith
+
+lemma equiv_of_equi :
+    equi a ⟨ι,σ⟩ ⟨ι',τ⟩  → equiv a ⟨ι, ⟨σ, h1⟩⟩ ⟨ι', ⟨τ, h2⟩⟩ := by
+  rintro ⟨h, equ⟩
+  convert equ
+  simp
+  linarith
 
 /-- Validity of formulas -/
 def valid (φ : @Form n) := ∀ ι σ, eval ι σ φ
@@ -354,6 +387,7 @@ lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a =
     subst σ_def
     unfold resultSet
     simp
+    let c_copy := c
     cases rh : roleOfIn a c <;> cases c <;> simp <;> simp at h
     any_goals -- Caller
       simp at rh
@@ -367,7 +401,7 @@ lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a =
           specialize @IH κ (!k) τ (by grind)
           aesop
       · intro ak_in
-        constructor
+        refine ⟨⟨?_, ?_⟩, ?_⟩
         · left
           rw [IH _ h]
           assumption
@@ -375,6 +409,11 @@ lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a =
           simp [eval] at hyp
           specialize hyp ι σ rfl equiv_refl
           grind
+        · refine ⟨ι, σ, ⟨rfl, equiv_refl⟩, ?_⟩
+          use c_copy
+          simp [c_copy, eval]
+          rw [@IH _ _ σ h]
+          simpa [roleOfIn]
     any_goals -- Callee
       simp at rh
       rcases rh with ⟨rh1,rh2⟩
@@ -388,7 +427,7 @@ lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a =
           aesop
         · rw [IH _ h] at ak_in; assumption
       · intro ak_in
-        constructor
+        refine ⟨⟨?_, ?_⟩, ?_⟩
         · right
           rw [IH _ h]
           assumption
@@ -396,6 +435,12 @@ lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a =
           simp [eval] at hyp
           specialize hyp ι σ rfl equiv_refl
           grind
+        · refine ⟨ι, σ, (by grind [equiv_refl]), ?_⟩
+          use c_copy
+          simp [c_copy, eval, roleOfIn]
+          rw [@IH _ _ σ h]
+          simp
+          tauto
     any_goals -- Other, easy
       simp at rh
       rcases rh with ⟨rh1,rh2⟩
@@ -439,14 +484,50 @@ lemma indistinguishable_then_same_values {ι ι': Dist} {σ k : Sequence} :
       simp [r] at equ
       rcases equ with ⟨prev_equ, Caller_eq, prev_same_contrib, same_pair⟩
       unfold contribSet at prev_same_contrib
+      let C_copy := C
       cases C <;> cases Cτ <;> simp [Call.pair, roleOfIn_eq_Caller_iff] at *
+      case normal.normal =>
+        rcases same_pair with ⟨_,_⟩
+        subst_eqs
+        simp at same_len
+        clear Caller_eq
+        ext ⟨d,k⟩
+        -- rw [IH] -- probaly not enough use of IH here?
+        simp [resultSet, contribSet, eval]
+        constructor
+          <;> rintro ⟨⟨dk_in, h22⟩, ⟨ι2, σ2, ⟨⟨σ2_len, σ'_equiv_σ2⟩, ⟨C, same_role, def_contrib, ndk_in⟩⟩⟩⟩
+        · refine ⟨⟨?_, ?_⟩, ?_⟩
+          · rw [← IH]
+            simp_all
+          · use ι2, σ2
+            simp_all
+            apply @equiv_trans _ a _ ι' τ' rfl ι σ' same_len ι2 σ2
+            · apply equiv_of_equi
+              apply equi_of_equiv
+              exact equiv_symm.mpr prev_equ
+            · apply equiv_of_equi
+              apply equi_of_equiv
+              exact σ'_equiv_σ2
+          · use ι2, σ2
+            simp_all
+            constructor
+            · apply @equiv_trans _ a _ ι' τ' rfl ι σ' same_len ι2 σ2
+              · apply equiv_of_equi
+                apply equi_of_equiv
+                exact equiv_symm.mpr prev_equ
+              · apply equiv_of_equi
+                apply equi_of_equiv
+                exact σ'_equiv_σ2
+            · sorry -- unclear here
+        · sorry
+
       all_goals
         rcases same_pair with ⟨_,_⟩
         subst_eqs
         simp at same_len
         clear Caller_eq
         simp [resultSet]
-        grind [equiv_then_know_same, roleOfIn_a]
+        sorry -- grind [equiv_then_know_same, roleOfIn_a]
     case Callee =>
       simp [r] at equ
       rcases equ with ⟨prev_equ, Callee_eq, prev_same_contrib, same_pair⟩
@@ -459,7 +540,7 @@ lemma indistinguishable_then_same_values {ι ι': Dist} {σ k : Sequence} :
         simp at same_len
         clear Callee_eq
         simp [resultSet, not_a]
-        grind [equiv_then_know_same, roleOfIn_a]
+        sorry -- grind [equiv_then_know_same, roleOfIn_a]
     case Other =>
       unfold resultSet
       rw [r]
