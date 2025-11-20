@@ -242,7 +242,7 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
                 simp_all [makeCall, addAgent, initial_call, initialState, zero_fin, Fin.lastCases]
               case cast i =>
                 simp only [makeCall, Nat.succ_eq_add_one, h1, ↓reduceIte, h2, addAgent, beq_iff_eq,
-                  Fin.zero_eq_last_iff, Nat.add_eq_zero, OfNat.ofNat_ne_zero, and_false,
+                  Fin.zero_eq_last_iff, Nat.add_eq_zero_iff, OfNat.ofNat_ne_zero, and_false,
                   Bool.false_eq_true, Fin.lastCases_castSucc, initial_call]
                 have : (0 : Fin (k + 4).succ) = Fin.castSucc 0 := by rfl
                 rw [this]
@@ -263,7 +263,7 @@ lemma inductiveCase (k : Nat) (seq : List (Call (k + 4))) :
             simp [addAgent, initialState]
             aesop
           case b_knows_a =>
-            simp only [makeCall, Nat.succ_eq_add_one, Fin.last_eq_zero_iff, Nat.add_eq_zero,
+            simp only [makeCall, Nat.succ_eq_add_one, Fin.last_eq_zero_iff, Nat.add_eq_zero_iff,
               OfNat.ofNat_ne_zero, and_false, ↓reduceIte, addAgent, beq_iff_eq,
               Fin.zero_eq_last_iff, Bool.false_eq_true, initialState, Fin.lastCases_last, false_or,
               succ_fin, initial_call]
