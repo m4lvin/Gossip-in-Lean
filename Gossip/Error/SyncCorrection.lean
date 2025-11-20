@@ -166,21 +166,19 @@ def resultSet (i : @Agent n) : @Dist n → @Sequence n → Set (@Value n)
     /- (**) Values that `i` knows to be wrong after the call (and can thus delete).
     The `sel` here decides which part of `contribSet` agent `a` may see (namely: not its own). -/
     let delete sel : Set Value := { ⟨j, d⟩ | ∀ ι' τ D, equiv i (ι,⟨σ,rfl⟩) (ι',τ)
-                                -- paper: → resultSet (other i C) ι' σ = resultSet (other i C) ι' τ
-                                -- new version here also allowing other calls:
-                                          → roleOfIn i C = roleOfIn i D
-                                          → sel (contribSet ι σ C) = sel (contribSet ι' τ D)
-                                          → eval ι' τ (S j (j, !d)) }
+                                                → roleOfIn i C = roleOfIn i D
+                                                → sel (contribSet ι σ C) = sel (contribSet ι' τ D)
+                                                → eval ι' τ (S j (j, !d)) }
     match C, roleOfIn i C with
       -- Not involved:
       | _, Other => resultSet i ι σ
-      -- Normal calls
+      -- Normal calls:
       | ⌜ a b ⌝, Caller => ((resultSet a ι σ ∪ resultSet b ι σ) \ refuse) \ delete Prod.snd
       | ⌜ a b ⌝, Callee => ((resultSet a ι σ ∪ resultSet b ι σ) \ refuse) \ delete Prod.fst
-      -- error from a (but not for a itself)
+      -- Error from a (but not for a itself):
       | ⌜ a^_ b ⌝, Caller => ((          resultSet a ι σ  ∪ resultSet b ι σ) \ refuse) \ delete Prod.snd
       | ⌜ a^c b ⌝, Callee => ((invert c (resultSet a ι σ) ∪ resultSet b ι σ) \ refuse) \ delete Prod.fst
-      -- error from b (but not for b itself)
+      -- Error from b (but not for b itself):
       | ⌜ a b^c ⌝, Caller => ((resultSet a ι σ ∪ invert c (resultSet b ι σ)) \ refuse) \ delete Prod.snd
       | ⌜ a b^_ ⌝, Callee => ((resultSet a ι σ ∪           resultSet b ι σ ) \ refuse) \ delete Prod.fst
 termination_by
@@ -542,7 +540,7 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {�
           refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
           · apply equiv_trans prev_equ; rw! [same_len]; exact equ2
           · rw [← role2]; try simp [roleOfIn]
-    case Other =>
+    case Other => -- third out of three outer cases, easy
       unfold resultSet
       rw [r]
       rw [equ.2.1] at r
@@ -562,7 +560,7 @@ lemma local_is_known {a b : @Agent n} (k : Bool) :
     have := indistinguishable_then_same_values ⟨?_, equ⟩ -- using Lemma 7
     <;> grind
 
-/-! NOTE: the remaining lemmas do not use Lemma 7 and 8, better reorder them later? -/
+/-! NOTE: the remaining lemmas do *not* use Lemma 7 and 8, better reorder them later? -/
 
 /-- Helper for Lemma 9, stronger version using a specific `k` and not `Kv`. -/
 lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
