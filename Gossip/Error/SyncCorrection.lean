@@ -154,6 +154,20 @@ TODO:
 
 -/
 
+/-- This sequence contains no transmission errors. -/
+def errFree : @Sequence n → Prop
+  | [] => True
+  | ⌜_ _⌝ :: rest => errFree rest
+  | ⌜_^_ _⌝ :: _ => False
+  | ⌜_ _^_⌝ :: _ => False
+
+/-- This sequence contains at most one transmission error. -/
+def maxOne : @Sequence n → Prop
+  | [] => True
+  | ⌜_   _⌝ :: rest => maxOne rest
+  | ⌜_^_ _⌝ :: rest => errFree rest
+  | ⌜_ _^_⌝ :: rest => errFree rest
+
 mutual
 
 /-- (Def 4) Semantics of call.
