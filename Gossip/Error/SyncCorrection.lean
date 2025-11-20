@@ -467,6 +467,7 @@ lemma equiv_then_know_same {a m ι} {σ : @Sequence n} {h1 : σ.length = m} {κ 
     have := @equiv_trans n a m κ τ h2 ι σ  h1 η ρ (by grind) equ (by convert equ'; grind)
     convert this
 
+set_option maxHeartbeats 2000000 in
 /-- Lemma 7 -/
 lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {σ τ : Sequence} :
     (ι, σ) ~_a (ι', τ)  →  ι⌈σ⌉a = ι'⌈τ⌉a := by
@@ -490,79 +491,57 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {�
       unfold contribSet at prev_same_contrib
       let C_copy := C
       cases C <;> cases D <;> simp [Call.pair, roleOfIn_eq_Caller_iff] at *
-      all_goals
+      all_goals -- 9 subcases
         rcases same_pair with ⟨_,_⟩
         subst_eqs
         simp only [List.length_cons, Nat.add_right_cancel_iff] at same_len
         clear Caller_eq
-      case normal.normal => -- 1 of 9 subcases
-        simp only [roleOfIn_a, resultSet]
+        simp [roleOfIn_a, resultSet]
         ext ⟨d,k⟩
         constructor
         all_goals
           intro dk_in
-          simp only [Subtype.forall, Set.mem_diff, Set.mem_union, Set.mem_setOf_eq] at dk_in
-          rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
-        · refine ⟨⟨?_, ?_⟩, ?_⟩
-          · rw [← IH]; simp_all
-          · rw [Set.mem_setOf_eq, ← equiv_then_know_same prev_equ]; exact dk_not_refused
-          · simp -- FIXME `simp only` does too little here
-            simp at not_self_corrected -- `a` considers a state that justifies keeping (d,k)
-            rcases not_self_corrected with ⟨ι2, σ2, ⟨len2, equ2⟩, ⟨C2, role2, same_contrib_2, ndk⟩⟩
-            refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, role2, ?_, ndk⟩
-            · have := equiv_trans (equiv_symm.mp prev_equ) equ2; rw! [same_len] at *; exact this
-            · grind [contribSet]
-        · refine ⟨⟨?_, ?_⟩, ?_⟩ -- adapted copy-pasta
-          · rw [IH]; simp_all
-          · rw [Set.mem_setOf_eq, equiv_then_know_same prev_equ]; exact dk_not_refused
-          · simp -- FIXME `simp only` does too little here
-            simp at not_self_corrected -- `a` considers a state that justifies keeping (d,k)
-            rcases not_self_corrected with ⟨ι2, σ2, ⟨len2, equ2⟩, ⟨C2, role2, same_contrib_2, ndk⟩⟩
-            refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, role2, ?_, ndk⟩
-            · apply equiv_trans prev_equ; rw! [same_len]; exact equ2
-            · grind [contribSet]
-      case normal.fstE =>
-        simp only [roleOfIn_a, resultSet, Subtype.forall, roleOfIn_fstE_eq_Caller_iff]
-        ext ⟨d,k⟩
-        constructor
-        · intro dk_in
           simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
           rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
-          refine ⟨⟨?_, ?_⟩, ?_⟩
-          · rw [← IH]; simp_all
-          · rw [Set.mem_setOf_eq, ← equiv_then_know_same prev_equ]; exact dk_not_refused
-          · simp -- FIXME `simp only` does too little here
-            simp at not_self_corrected -- `a` considers a state that justifies keeping (d,k)
-            rcases not_self_corrected with ⟨ι2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
-            refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, ?_, ?_, ndk⟩
-            · have := equiv_trans (equiv_symm.mp prev_equ) equ2; rw! [same_len] at *; exact this
-            · rw [← role2]; simp
-            · simp [contribSet] -- here the `sel` in `resultSet` matters
-              rw [← prev_same_contrib]
-              rw [← same_contrib_2]
-              simp [contribSet]
-        · -- todo copy pasta adaptation
-          sorry
-      case normal.sndE =>
-        sorry
-
-      case fstE.normal =>
-        sorry
-      case fstE.fstE =>
-        sorry
-      case fstE.sndE =>
-        sorry
-
-      case sndE.normal =>
-        sorry
-      case sndE.fstE =>
-        sorry
-      case sndE.sndE =>
-        sorry
-
-    case Callee =>
-      -- Should be similar to `Caller` cases.
-      sorry
+        · simp_all [← IH, ← equiv_then_know_same prev_equ]
+          rcases not_self_corrected with ⟨ι2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
+          refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
+          · have := equiv_trans (equiv_symm.mp prev_equ) equ2; rw! [same_len] at *; exact this
+          · rw [← role2]; try simp [roleOfIn]
+        · simp_all [equiv_then_know_same prev_equ]
+          rcases not_self_corrected with ⟨ι2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
+          refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
+          · apply equiv_trans prev_equ; rw! [same_len]; exact equ2
+          · rw [← role2]; try simp [roleOfIn]
+    case Callee => -- second of three outer cases, very similar to `Caller`
+      simp [r] at equ
+      rcases equ with ⟨prev_equ, Callee_eq, prev_same_contrib, same_pair⟩
+      unfold contribSet at prev_same_contrib
+      let C_copy := C
+      cases C <;> cases D <;> simp [Call.pair, roleOfIn_eq_Callee_iff] at *
+      all_goals -- again 9 subcases, same proof
+        rcases same_pair with ⟨_,_⟩
+        rcases r with ⟨_,_⟩
+        subst_eqs
+        simp only [List.length_cons, Nat.add_right_cancel_iff] at same_len
+        clear Callee_eq
+        simp_all [resultSet]
+        ext ⟨d,k⟩
+        constructor
+        all_goals
+          intro dk_in
+          simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
+          rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
+        · simp_all [← IH, ← equiv_then_know_same prev_equ]
+          rcases not_self_corrected with ⟨ι2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
+          refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
+          · have := equiv_trans (equiv_symm.mp prev_equ) equ2; rw! [same_len] at *; exact this
+          · rw [← role2]; try simp [roleOfIn]
+        · simp_all [equiv_then_know_same prev_equ]
+          rcases not_self_corrected with ⟨ι2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
+          refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
+          · apply equiv_trans prev_equ; rw! [same_len]; exact equ2
+          · rw [← role2]; try simp [roleOfIn]
     case Other =>
       unfold resultSet
       rw [r]
