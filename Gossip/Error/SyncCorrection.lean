@@ -165,7 +165,7 @@ def resultSet (i : @Agent n) : @Dist n → @Sequence n → Set (@Value n)
                                 -- paper: → resultSet (other i C) ι' σ = resultSet (other i C) ι' τ
                                 -- new version here also allowing other calls:
                                           → roleOfIn i C = roleOfIn i D
-                                          → contribSet ι' σ C = contribSet ι' τ D
+                                          → contribSet ι σ C = contribSet ι' τ D
                                           → eval ι' τ (S j (j, !d)) }
     match C, roleOfIn i C with
       -- Not involved:
