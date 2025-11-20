@@ -1,5 +1,6 @@
 import Mathlib.Data.Set.Basic
 import Mathlib.Data.Prod.Basic
+import Mathlib.Tactic.DepRewrite
 import Mathlib.Tactic.Linarith
 
 namespace Error
@@ -98,6 +99,8 @@ def Form.length : @Form n → Nat
   | S _ _ => 1
   | K _ φ => 1 + φ.length
 
+/-! ## Roles -/
+
 inductive Role : Type
   | Caller : Role
   | Callee : Role
@@ -160,25 +163,26 @@ def resultSet (i : @Agent n) : @Dist n → @Sequence n → Set (@Value n)
   | ι, (C :: σ) =>
     /- (*) Values that `i` already knows to be wrong before the call (and can thus refuse). -/
     let refuse : Set Value := { ⟨j, d⟩ | eval ι σ (K i (S j (j, !d))) }
-    /- (**) Values that `i` knows to be wrong after the call (and can thus delete). -/
-    let delete : Set Value := { ⟨j, d⟩ | ∀ ι' τ D, equiv i (ι,⟨σ,rfl⟩) (ι',τ)
+    /- (**) Values that `i` knows to be wrong after the call (and can thus delete).
+    The `sel` here decides which part of `contribSet` agent `a` may see (namely: not its own). -/
+    let delete sel : Set Value := { ⟨j, d⟩ | ∀ ι' τ D, equiv i (ι,⟨σ,rfl⟩) (ι',τ)
                                 -- paper: → resultSet (other i C) ι' σ = resultSet (other i C) ι' τ
                                 -- new version here also allowing other calls:
                                           → roleOfIn i C = roleOfIn i D
-                                          → contribSet ι σ C = contribSet ι' τ D
+                                          → sel (contribSet ι σ C) = sel (contribSet ι' τ D)
                                           → eval ι' τ (S j (j, !d)) }
     match C, roleOfIn i C with
       -- Not involved:
       | _, Other => resultSet i ι σ
       -- Normal calls
-      | ⌜ a b ⌝, Caller => ((resultSet a ι σ ∪ resultSet b ι σ) \ refuse) \ delete
-      | ⌜ a b ⌝, Callee => ((resultSet a ι σ ∪ resultSet b ι σ) \ refuse) \ delete
+      | ⌜ a b ⌝, Caller => ((resultSet a ι σ ∪ resultSet b ι σ) \ refuse) \ delete Prod.snd
+      | ⌜ a b ⌝, Callee => ((resultSet a ι σ ∪ resultSet b ι σ) \ refuse) \ delete Prod.fst
       -- error from a (but not for a itself)
-      | ⌜ a^_ b ⌝, Caller => ((          resultSet a ι σ  ∪ resultSet b ι σ) \ refuse) \ delete
-      | ⌜ a^c b ⌝, Callee => ((invert c (resultSet a ι σ) ∪ resultSet b ι σ) \ refuse) \ delete
+      | ⌜ a^_ b ⌝, Caller => ((          resultSet a ι σ  ∪ resultSet b ι σ) \ refuse) \ delete Prod.snd
+      | ⌜ a^c b ⌝, Callee => ((invert c (resultSet a ι σ) ∪ resultSet b ι σ) \ refuse) \ delete Prod.fst
       -- error from b (but not for b itself)
-      | ⌜ a b^c ⌝, Caller => ((resultSet a ι σ ∪ invert c (resultSet b ι σ)) \ refuse) \ delete
-      | ⌜ a b^_ ⌝, Callee => ((resultSet a ι σ ∪           resultSet b ι σ ) \ refuse) \ delete
+      | ⌜ a b^c ⌝, Caller => ((resultSet a ι σ ∪ invert c (resultSet b ι σ)) \ refuse) \ delete Prod.snd
+      | ⌜ a b^_ ⌝, Callee => ((resultSet a ι σ ∪           resultSet b ι σ ) \ refuse) \ delete Prod.fst
 termination_by
   _ σ => (σ.length, 0) -- should be below contribSet
 decreasing_by
@@ -464,89 +468,107 @@ lemma equiv_then_know_same {a m ι} {σ : @Sequence n} {h1 : σ.length = m} {κ 
     convert this
 
 /-- Lemma 7 -/
-lemma indistinguishable_then_same_values {ι ι': Dist} {σ k : Sequence} :
-    (ι, σ) ~_a (ι', k)  →  ι⌈σ⌉a = ι'⌈k⌉a := by
+lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {σ τ : Sequence} :
+    (ι, σ) ~_a (ι', τ)  →  ι⌈σ⌉a = ι'⌈τ⌉a := by
   intro ⟨same_len, equ⟩
   simp at same_len
-  induction σ generalizing k
+  induction σ generalizing τ
   case nil =>
     have := List.length_eq_zero_iff.mp same_len.symm
     aesop
-  case cons C σ' IH =>
+  case cons C σ IH =>
     simp at same_len
-    rcases List.exists_cons_of_length_eq_add_one same_len.symm with ⟨Cτ, τ', τ_def⟩
-    subst τ_def
+    rcases List.exists_cons_of_length_eq_add_one same_len.symm with ⟨D, τ, _def⟩
+    subst _def
     simp only [List.length_cons, equiv, Nat.add_one_sub_one] at equ
-    specialize IH (by grind) equ.1 -- IH now says `ι⌈σ'⌉a = ι'⌈τ'⌉a`
-    -- distinguish cases whether a is involved in κ (and this also κ') or not
+    specialize IH (by grind) equ.1 -- IH now says `ι⌈σ⌉a = ι'⌈τ⌉a`
+    -- distinguish cases whether/how a is involved in C (and thus also D) or not
     cases r : roleOfIn a C
-    case Caller =>
+    case Caller => -- first out of three outer cases
       simp [r] at equ
       rcases equ with ⟨prev_equ, Caller_eq, prev_same_contrib, same_pair⟩
       unfold contribSet at prev_same_contrib
       let C_copy := C
-      cases C <;> cases Cτ <;> simp [Call.pair, roleOfIn_eq_Caller_iff] at *
-      case normal.normal =>
+      cases C <;> cases D <;> simp [Call.pair, roleOfIn_eq_Caller_iff] at *
+      all_goals
         rcases same_pair with ⟨_,_⟩
         subst_eqs
-        simp at same_len
+        simp only [List.length_cons, Nat.add_right_cancel_iff] at same_len
         clear Caller_eq
+      case normal.normal => -- 1 of 9 subcases
+        simp only [roleOfIn_a, resultSet]
         ext ⟨d,k⟩
-        -- rw [IH] -- probaly not enough use of IH here?
-        simp [resultSet, contribSet, eval]
         constructor
-          <;> rintro ⟨⟨dk_in, h22⟩, ⟨ι2, σ2, ⟨⟨σ2_len, σ'_equiv_σ2⟩, ⟨C, same_role, def_contrib, ndk_in⟩⟩⟩⟩
+        all_goals
+          intro dk_in
+          simp only [Subtype.forall, Set.mem_diff, Set.mem_union, Set.mem_setOf_eq] at dk_in
+          rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
         · refine ⟨⟨?_, ?_⟩, ?_⟩
-          · rw [← IH]
-            simp_all
-          · use ι2, σ2
-            simp_all
-            apply @equiv_trans _ a _ ι' τ' rfl ι σ' same_len ι2 σ2
-            · apply equiv_of_equi
-              apply equi_of_equiv
-              exact equiv_symm.mpr prev_equ
-            · apply equiv_of_equi
-              apply equi_of_equiv
-              exact σ'_equiv_σ2
-          · use ι2, σ2
-            simp_all
-            constructor
-            · apply @equiv_trans _ a _ ι' τ' rfl ι σ' same_len ι2 σ2
-              · apply equiv_of_equi
-                apply equi_of_equiv
-                exact equiv_symm.mpr prev_equ
-              · apply equiv_of_equi
-                apply equi_of_equiv
-                exact σ'_equiv_σ2
-            · sorry -- unclear here
-        · sorry
+          · rw [← IH]; simp_all
+          · rw [Set.mem_setOf_eq, ← equiv_then_know_same prev_equ]; exact dk_not_refused
+          · simp -- FIXME `simp only` does too little here
+            simp at not_self_corrected -- `a` considers a state that justifies keeping (d,k)
+            rcases not_self_corrected with ⟨ι2, σ2, ⟨len2, equ2⟩, ⟨C2, role2, same_contrib_2, ndk⟩⟩
+            refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, role2, ?_, ndk⟩
+            · have := equiv_trans (equiv_symm.mp prev_equ) equ2; rw! [same_len] at *; exact this
+            · grind [contribSet]
+        · refine ⟨⟨?_, ?_⟩, ?_⟩ -- adapted copy-pasta
+          · rw [IH]; simp_all
+          · rw [Set.mem_setOf_eq, equiv_then_know_same prev_equ]; exact dk_not_refused
+          · simp -- FIXME `simp only` does too little here
+            simp at not_self_corrected -- `a` considers a state that justifies keeping (d,k)
+            rcases not_self_corrected with ⟨ι2, σ2, ⟨len2, equ2⟩, ⟨C2, role2, same_contrib_2, ndk⟩⟩
+            refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, role2, ?_, ndk⟩
+            · apply equiv_trans prev_equ; rw! [same_len]; exact equ2
+            · grind [contribSet]
+      case normal.fstE =>
+        simp only [roleOfIn_a, resultSet, Subtype.forall, roleOfIn_fstE_eq_Caller_iff]
+        ext ⟨d,k⟩
+        constructor
+        · intro dk_in
+          simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
+          rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
+          refine ⟨⟨?_, ?_⟩, ?_⟩
+          · rw [← IH]; simp_all
+          · rw [Set.mem_setOf_eq, ← equiv_then_know_same prev_equ]; exact dk_not_refused
+          · simp -- FIXME `simp only` does too little here
+            simp at not_self_corrected -- `a` considers a state that justifies keeping (d,k)
+            rcases not_self_corrected with ⟨ι2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
+            refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, ?_, ?_, ndk⟩
+            · have := equiv_trans (equiv_symm.mp prev_equ) equ2; rw! [same_len] at *; exact this
+            · rw [← role2]; simp
+            · simp [contribSet] -- here the `sel` in `resultSet` matters
+              rw [← prev_same_contrib]
+              rw [← same_contrib_2]
+              simp [contribSet]
+        · -- todo copy pasta adaptation
+          sorry
+      case normal.sndE =>
+        sorry
 
-      all_goals
-        rcases same_pair with ⟨_,_⟩
-        subst_eqs
-        simp at same_len
-        clear Caller_eq
-        simp [resultSet]
-        sorry -- grind [equiv_then_know_same, roleOfIn_a]
+      case fstE.normal =>
+        sorry
+      case fstE.fstE =>
+        sorry
+      case fstE.sndE =>
+        sorry
+
+      case sndE.normal =>
+        sorry
+      case sndE.fstE =>
+        sorry
+      case sndE.sndE =>
+        sorry
+
     case Callee =>
-      simp [r] at equ
-      rcases equ with ⟨prev_equ, Callee_eq, prev_same_contrib, same_pair⟩
-      unfold contribSet at prev_same_contrib
-      cases C <;> cases Cτ <;> simp [Call.pair, roleOfIn_eq_Callee_iff] at *
-        <;> rcases r with ⟨not_a, h⟩ <;> subst h
-      all_goals
-        rcases same_pair with ⟨_,_⟩
-        subst_eqs
-        simp at same_len
-        clear Callee_eq
-        simp [resultSet, not_a]
-        sorry -- grind [equiv_then_know_same, roleOfIn_a]
+      -- Should be similar to `Caller` cases.
+      sorry
     case Other =>
       unfold resultSet
       rw [r]
       rw [equ.2.1] at r
       rw [r]
-      simp
+      simp only
       exact IH
 
 /-- Lemma 8. The truth value of any "a has ..." atom is known by a.
@@ -560,6 +582,8 @@ lemma local_is_known {a b : @Agent n} (k : Bool) :
     intro ι σ bk_in κ τ same_len equ
     have := indistinguishable_then_same_values ⟨?_, equ⟩ -- using Lemma 7
     <;> grind
+
+/-! NOTE: the remaining lemmas do not use Lemma 7 and 8, better reorder them later? -/
 
 /-- Helper for Lemma 9, stronger version using a specific `k` and not `Kv`. -/
 lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
