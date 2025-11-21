@@ -25,6 +25,10 @@ instance : Coe (@Agent n) (@Value n) := ⟨fun a => ⟨a,true⟩⟩
 /-- An *initial* secret distribution, each agent only has their own value. -/
 abbrev Dist := @Agent n → Bool
 
+/-- In the given distribution, invert the value for this agent i -/
+def Dist.switch : @Agent n -> @Dist n -> @Dist n
+  | i, ι => fun a => if a = i then not (ι a) else ι a
+
 inductive Call : Type
   | normal : (caller : @Agent n) → (callee : @Agent n) → Call -- a b
   | fstE : (caller : @Agent n) → (err : @Agent n) → (callee : @Agent n) → Call -- a^c b
@@ -41,30 +45,16 @@ def Call.pair : @Call n → (@Agent n × @Agent n)
   | ⌜ a^_ b   ⌝ => (a , b)
   | ⌜ a   b^_ ⌝ => (a , b)
 
--- unused
-instance instMembershipAgentCall : Membership (@Agent n) (@Call n) := .mk $ fun c i => match c with
-  | ⌜ a   b   ⌝ => i = a ∨ i = b
-  | ⌜ a^_ b   ⌝ => i = a ∨ i = b
-  | ⌜ a   b^_ ⌝ => i = a ∨ i = b
-
--- unused
-instance {a : @Agent n} {c : @Call n} : Decidable (a ∈ c) := by
-  rcases c with (⟨d,e⟩|⟨d,_,e⟩|⟨d,e,_⟩) <;> by_cases a = d <;> by_cases a = e
-  all_goals
-    simp_all [instMembershipAgentCall]
-    try exact instDecidableTrue
-    try exact instDecidableFalse
-
-/-- (Def 2) A sequence of calls.
-For easier pattern matching this is in *reverse* order, i.e. the newest call is the first element. -/
+/-- (Def 2) A sequence is a list of calls.
+For easy pattern matching this is in *reverse* order: the newest call is the first element. -/
 abbrev Sequence : Type := List (@Call n)
 
 /-- Subsequence relation: τ extends σ.
-Because the lists are with the newest call first, this can be defined as saying that σ is a suffix of tau. -/
+Because the lists are with the newest call first, this is defined as σ being a suffix of τ. -/
 notation σ:arg "⊑" τ:arg => σ <:+ τ
 
 /-- Flip the value of the secret of this agent in the given set. -/
-def invert : (@Agent n) -> Set (@Value n) -> Set (@Value n)
+def invert : @Agent n -> Set (@Value n) -> Set (@Value n)
   | i, vs => vs.image (fun (j,b) => if j = i then (j, not b) else (j,b))
 
 /-! ## Syntax -/
@@ -85,7 +75,9 @@ inductive Form : Type
 open Form
 
 notation "¬'" φ:arg => Neg φ
-notation φ1:arg "⋀" φ2:arg => Con φ1 φ2
+
+infixr:60 "⋀" => Con
+
 notation φ1:arg "⋁" φ2:arg => Neg (Con (Neg φ1) (Neg φ2))
 notation φ1:arg "⟹" φ2:arg => (Neg φ1) ⋁ φ2
 
@@ -292,7 +284,7 @@ lemma equiv_of_equi :
 /-- Validity of formulas -/
 def valid (φ : @Form n) := ∀ ι σ, eval ι σ φ
 
-prefix:100 "⊨" => valid -- FIXME what's a good precedence value here?
+prefix:100 "⊨ " => valid -- FIXME what's a good precedence value here?
 
 /-! ## Properties of the Semantics -/
 
@@ -639,11 +631,57 @@ lemma know_your_own : ⊨ Kv a a := by
     rw [know_self _ _ _ _ _ equ] at h
     exact h
 
+/-- Lemma 11 -/
+lemma knowledge_implies_correct_belief :
+    (ι,σ) ⊧ (Kv a b) → (b, ι b) ∈ (resultSet a ι σ) := by
+  intro a_kv_b
+  unfold eval eval eval at a_kv_b
+  simp only [not_and_or, not_not] at a_kv_b
+  rcases a_kv_b with h|h
+  · induction σ
+    · simp_all [eval]
+      by_cases b = a
+      · aesop
+      · exfalso
+        have := h ι rfl
+        have := h (ι.switch b) (by grind [Dist.switch])
+        grind [Dist.switch]
+    case cons C σ IH =>
+      -- need cases what `C` could be and whether it involves `a` and `b` here?
+      sorry
+  · -- analogous?
+    sorry
+
+/-
+TODO: example
+We recall that correct belief need not imply knowledge: given I = a|b, after an initial call
+ab agent a believes b, ba ∧ ¬ba, and even correctly believes that, as bb ∧ ba ∧ ¬ba. But a
+does not know the secret of b, as (a|b, ab) ∼a (a|b, abb ).
+-/
+
+lemma corollary_12 {a b : @Agent n} (k : Bool) :
+      ⊨ ((     S a ⟨b,k⟩ ) ⟹ (K a (     S a ⟨b,k⟩) ))
+    ∧ ⊨ ((Neg (S a ⟨b,k⟩)) ⟹ (K a (Neg (S a ⟨b,k⟩)))) := by
+  sorry
+
+lemma corollary_twelve {a b : @Agent n} :
+      ⊨ ( (K a (S b (b,true ))) ⟹ ((S b (b,true)) ⋀ (S a (b,true)) ⋀ (¬' (S a (b,false)))) )
+    ∧ ⊨ ( (K a (S b (b,false))) ⟹ ((S b (b,true)) ⋀ (S a (b,true)) ⋀ (¬' (S a (b,false)))) )
+    := by
+  constructor
+  · simp [valid, eval]
+    intro ι σ lhs
+
+
+    sorry
+  · sorry
+
 /-!
 
-Still to do:
+Corollary 13 |= Ka bb ↔ Ka (bb ∧ ba ∧ ¬ba) and |= Ka bb ↔ Ka(bb ∧ ¬ba ∧ ba).
+ ⊣
 
-/-- Lemma 11 -/
+Still to do:
 
 /-- Corollary 12 -/
 
