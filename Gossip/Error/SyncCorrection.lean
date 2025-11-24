@@ -17,9 +17,9 @@ variable {n : Nat}
 
 abbrev Agent : Type := Fin n
 
-abbrev Value : Type := (@Agent n × Bool) -- using Bool instead of 0 and 1
+abbrev Value : Type := (@Agent n × Bool)
 
--- We allow to write "a" for "(a, 1)", meaning NOT "(a, 0)" as in paper at the moment.
+/-- We allow writing just the agent "a" for the value "(a, true)". -/
 instance : Coe (@Agent n) (@Value n) := ⟨fun a => ⟨a,true⟩⟩
 
 /-- An *initial* secret distribution, each agent only has their own value. -/
@@ -138,13 +138,7 @@ def other (i : @Agent n) : (c : @Call n) → @Agent n
   | ⌜ a^_ b   ⌝ => if i = a then b else a
   | ⌜ a   b^_ ⌝ => if i = a then b else a
 
-
-/-! ## Semantics
-
-TODO:
-- actually ensure that at most one error may happen
-
--/
+/-! ## Sequences with at most one transmission error -/
 
 /-- This sequence contains no transmission errors. -/
 def errFree : @Sequence n → Prop
@@ -160,41 +154,73 @@ def maxOne : @Sequence n → Prop
   | ⌜_^_ _⌝ :: rest => errFree rest
   | ⌜_ _^_⌝ :: rest => errFree rest
 
+@[aesop unsafe apply]
+lemma Sequence.maxOne_of_errFree : errFree σ → maxOne σ := by
+  induction σ
+  · simp [errFree,maxOne]
+  case cons C σ IH =>
+    cases C <;> simp only [errFree, maxOne, IsEmpty.forall_iff]
+    exact IH
+
+@[aesop unsafe apply]
+lemma Sequence.maxOne_cons : maxOne (C :: σ) → maxOne σ := by
+  intro
+  cases C <;> simp [maxOne] at * <;> aesop
+
+/-- Short notation for the frequently needed proof that
+if σ.κ has at most one error then σ has at most one error. -/
+notation "⁻" o:arg => Sequence.maxOne_cons o
+
+/-- Sequence with at most one error. -/
+def OSequence : Type := @Subtype (@Sequence n) maxOne
+
+def OSequence.length (σ : @OSequence n) : Nat := σ.1.length
+
+@[simp]
+lemma OSequence.length_nil : OSequence.length (⟨[], h⟩ : @OSequence n) = 0 := by
+  simp [OSequence.length]
+
+@[simp]
+lemma OSequence.length_def (σ : @Sequence n) h :
+  OSequence.length ⟨σ, h⟩ = σ.length := by unfold OSequence.length; simp
+
+/-! ## Semantics -/
+
 mutual
 
 /-- (Def 4) Semantics of call.
 What values does this agent have after this sequence? -/
-def resultSet (i : @Agent n) : @Dist n → @Sequence n → Set (@Value n)
-  | ι, [] => { (i, ι i) } -- for the basis, ι[ε] = ι
-  | ι, (C :: σ) =>
+def resultSet (i : @Agent n) : @Dist n → @OSequence n → Set (@Value n)
+  | ι, ⟨[],_⟩ => { (i, ι i) } -- for the basis, ι[ε] = ι
+  | ι, ⟨(C :: σ),o⟩ =>
     /- (*) Values that `i` already knows to be wrong before the call (and can thus refuse). -/
-    let refuse : Set Value := { ⟨j, d⟩ | eval ι σ (K i (S j (j, !d))) }
+    let refuse : Set Value := { ⟨j, d⟩ | eval ι ⟨σ,⁻o⟩ (K i (S j (j, !d))) }
     /- (**) Values that `i` knows to be wrong after the call (and can thus delete).
     The `sel` here decides which part of `contribSet` agent `a` may see (namely: not its own). -/
-    let delete sel : Set Value := { ⟨j, d⟩ | ∀ ι' τ D, equiv i (ι,⟨σ,rfl⟩) (ι',τ)
+    let delete sel : Set Value := { ⟨j, d⟩ | ∀ ι' τ D, equiv i (ι,⟨⟨σ,⁻o⟩,rfl⟩) (ι',τ)
                                                 → roleOfIn i C = roleOfIn i D
-                                                → sel (contribSet ι σ C) = sel (contribSet ι' τ D)
+                                                → sel (contribSet ι ⟨σ,⁻o⟩ C) = sel (contribSet ι' τ D)
                                                 → eval ι' τ (S j (j, !d)) }
     match C, roleOfIn i C with
       -- Not involved:
-      | _, Other => resultSet i ι σ
+      | _, Other => resultSet i ι ⟨σ,⁻o⟩
       -- Normal calls:
-      | ⌜ a b ⌝, Caller => ((resultSet a ι σ ∪ resultSet b ι σ) \ refuse) \ delete Prod.snd
-      | ⌜ a b ⌝, Callee => ((resultSet a ι σ ∪ resultSet b ι σ) \ refuse) \ delete Prod.fst
+      | ⌜ a b ⌝, Caller => ((resultSet a ι ⟨σ,⁻o⟩ ∪ resultSet b ι ⟨σ,⁻o⟩) \ refuse) \ delete Prod.snd
+      | ⌜ a b ⌝, Callee => ((resultSet a ι ⟨σ,⁻o⟩ ∪ resultSet b ι ⟨σ,⁻o⟩) \ refuse) \ delete Prod.fst
       -- Error from a (but not for a itself):
-      | ⌜ a^_ b ⌝, Caller => ((          resultSet a ι σ  ∪ resultSet b ι σ) \ refuse) \ delete Prod.snd
-      | ⌜ a^c b ⌝, Callee => ((invert c (resultSet a ι σ) ∪ resultSet b ι σ) \ refuse) \ delete Prod.fst
+      | ⌜ a^_ b ⌝, Caller => ((          resultSet a ι ⟨σ,⁻o⟩  ∪ resultSet b ι ⟨σ,⁻o⟩) \ refuse) \ delete Prod.snd
+      | ⌜ a^c b ⌝, Callee => ((invert c (resultSet a ι ⟨σ,⁻o⟩) ∪ resultSet b ι ⟨σ,⁻o⟩) \ refuse) \ delete Prod.fst
       -- Error from b (but not for b itself):
-      | ⌜ a b^c ⌝, Caller => ((resultSet a ι σ ∪ invert c (resultSet b ι σ)) \ refuse) \ delete Prod.snd
-      | ⌜ a b^_ ⌝, Callee => ((resultSet a ι σ ∪           resultSet b ι σ ) \ refuse) \ delete Prod.fst
+      | ⌜ a b^c ⌝, Caller => ((resultSet a ι ⟨σ,⁻o⟩ ∪ invert c (resultSet b ι ⟨σ,⁻o⟩)) \ refuse) \ delete Prod.snd
+      | ⌜ a b^_ ⌝, Callee => ((resultSet a ι ⟨σ,⁻o⟩ ∪           resultSet b ι ⟨σ,⁻o⟩ ) \ refuse) \ delete Prod.fst
 termination_by
   _ σ => (σ.length, 0) -- should be below contribSet
 decreasing_by
   all_goals
-    apply Prod.Lex.left; simp; try omega -- sequence becomes shorter in all recursive calls!
+    apply Prod.Lex.left; grind [OSequence.length] -- sequence becomes shorter in all recursive calls!
 
 /-- Right after sequence `σ`, what values will caller and callee contribute to the call? -/
-def contribSet (ι : @Dist n) (σ : @Sequence n) : @Call n → Set (@Value n) × Set (@Value n)
+def contribSet (ι : @Dist n) (σ : @OSequence n) : @Call n → Set (@Value n) × Set (@Value n)
   | ⌜ a   b   ⌝ => (resultSet a ι σ           ,            resultSet b ι σ)
   | ⌜ a^c b   ⌝ => (invert c $ resultSet a ι σ,            resultSet b ι σ)
   | ⌜ a   b^c ⌝ => (resultSet a ι σ           , invert c $ resultSet b ι σ)
@@ -207,28 +233,25 @@ decreasing_by
 /-- (Def 5) Observation relation.
 This is *synchronous*. -/
 def equiv {k} (a : @Agent n) :
-    (@Dist n × {σ : @Sequence n // σ.length = k}) → (@Dist n × {σ : @Sequence n // σ.length = k}) → Prop
-  | (ι, ⟨[]    ,_⟩), (ι', ⟨[]    ,_⟩) => ι a = ι' a
-  | (ι, ⟨C :: σ,_⟩), (ι', ⟨D :: τ,_⟩) =>
-                          @equiv (k-1) a (ι,⟨σ, by aesop⟩) (ι',⟨τ, by aesop⟩)
+    (@Dist n × {σ : @OSequence n // σ.length = k}) → (@Dist n × {σ : @OSequence n // σ.length = k}) → Prop
+  | (ι, ⟨⟨[]    ,_⟩,_⟩), (ι', ⟨⟨[]    ,_⟩,_⟩) => ι a = ι' a
+  | (ι, ⟨⟨C :: σ,o⟩,_⟩), (ι', ⟨⟨D :: τ,q⟩,_⟩) =>
+                          @equiv (k-1) a (ι,⟨⟨σ,⁻o⟩, by grind [OSequence.length]⟩) (ι',⟨⟨τ,⁻q⟩, by grind [OSequence.length]⟩)
                         ∧ roleOfIn a C = roleOfIn a D
                         -- Depending on role, observe (contribSet of) the other agent in the call
                         ∧ match roleOfIn a C with
                           | Other => True
-                          | Caller => (contribSet ι σ C).2 = (contribSet ι' τ D).2 ∧ C.pair = D.pair
-                          | Callee => (contribSet ι σ C).1 = (contribSet ι' τ D).1 ∧ C.pair = D.pair
+                          | Caller => (contribSet ι ⟨σ,⁻o⟩ C).2 = (contribSet ι' ⟨τ,⁻q⟩ D).2 ∧ C.pair = D.pair
+                          | Callee => (contribSet ι ⟨σ,⁻o⟩ C).1 = (contribSet ι' ⟨τ,⁻q⟩ D).1 ∧ C.pair = D.pair
 
 termination_by
   ισ _ => (ισ.2.1.length, 0) -- should be above contribSet
 decreasing_by
-  · apply Prod.Lex.left; simp
-  · apply Prod.Lex.left; simp
   all_goals
-    apply Prod.Lex.left
-    aesop
+    apply Prod.Lex.left; grind [OSequence.length]
 
 /-- (Def 6) Semantics. -/
-def eval : @Dist n → @Sequence n → @Form n → Prop
+def eval : @Dist n → @OSequence n → @Form n → Prop
   | _, _, .Top => True
   | ι, σ, .Neg φ => ¬ eval ι σ φ
   | ι, σ, .S a (j, k) => (j, k) ∈ resultSet a ι σ
@@ -251,17 +274,17 @@ end
 notation ι:arg "⌈" σ:arg "⌉" a:arg => resultSet a ι σ
 
 @[simp]
-lemma resultSet_nil {ι i} : @resultSet n i ι []  = { (i, ι i) } := by simp [resultSet]
+lemma resultSet_nil {ι i} : @resultSet n i ι ⟨[],o⟩  = { (i, ι i) } := by simp [resultSet]
 
 @[simp]
-lemma equiv_nil : equiv i (ι, ⟨[],h1⟩) (κ, ⟨[],h2⟩) ↔ ι i = κ i := by simp [equiv]
+lemma equiv_nil : equiv i (ι, ⟨⟨[],o1⟩,h1⟩) (κ, ⟨⟨[],o2⟩,h2⟩) ↔ ι i = κ i := by simp [equiv]
 
 /-! ## Notation and Abbreviations -/
 
 notation ισ:100 "⊧" φ:100 => eval ισ.1 ισ.2 φ
 
 /-- An abbreviation to easily say that we have the same length and (can thus say) `equiv`. -/
-def equi (a : @Agent n) (ισ : @Dist n × @Sequence n) (ι'τ : @Dist n × @Sequence n) : Prop :=
+def equi (a : @Agent n) (ισ : @Dist n × @OSequence n) (ι'τ : @Dist n × @OSequence n) : Prop :=
   ∃ h : ισ.2.length = ι'τ.2.length, equiv a ⟨ισ.1, ⟨ισ.2, rfl⟩⟩ ⟨ι'τ.1, ⟨ι'τ.2, h.symm⟩⟩
 
 notation ισ:arg " ~_ " a:arg ι'τ:arg => equi a ισ ι'τ
@@ -278,7 +301,6 @@ lemma equiv_of_equi :
     equi a ⟨ι,σ⟩ ⟨ι',τ⟩  → equiv a ⟨ι, ⟨σ, h1⟩⟩ ⟨ι', ⟨τ, h2⟩⟩ := by
   rintro ⟨h, equ⟩
   convert equ
-  simp
   linarith
 
 /-- Validity of formulas -/
@@ -289,57 +311,60 @@ prefix:100 "⊨ " => valid -- FIXME what's a good precedence value here?
 /-! ## Properties of the Semantics -/
 
 lemma sameRole_of_equiv :
-    equiv a (ι, ⟨C₁ :: σ, h1⟩) (κ, ⟨C₂ :: τ, h2⟩) →
+    equiv a (ι, ⟨⟨C₁ :: σ, o1⟩, h1⟩) (κ, ⟨⟨C₂ :: τ, o2⟩ , h2⟩) →
     roleOfIn a C₁ = roleOfIn a C₂ := by
   unfold equiv
   simp_all
 
-lemma equiv_refl : equiv (a : Agent) (ι, σ) (ι, σ) := by
+lemma equiv_refl {n} {a : @Agent n} {ι : @Dist n} {k} {σ : { σ : OSequence // σ.length = k }} :
+    equiv (a : Agent) (ι, σ) (ι, σ) := by
   unfold equiv
   split
   · simp_all
   case h_2 he1 he2 =>
-    simp_all
+    simp_all [OSequence.length]
     rcases he1 with ⟨_,_,_⟩
     rcases he2 with ⟨_,_⟩
     subst_eqs
     simp
     cases roleOfIn a _ <;> simp_all <;> apply equiv_refl
 
-lemma equiv_symm {i m ι} {σ : @Sequence n} {h1 : σ.length = m} {κ τ h2} :
+lemma equiv_symm {i m ι} {σ : @OSequence n} {h1 : σ.length = m} {κ τ h2} :
       equiv i (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩)
     ↔ equiv i (κ, ⟨τ, h2⟩) (ι, ⟨σ, h1⟩) := by
+  rcases σ with ⟨σ,o⟩
+  rcases τ with ⟨τ,o'⟩
   induction σ generalizing m τ
-  · simp at h1
-    subst h1
-    simp at h2
+  · subst h1
+    simp [OSequence.length] at h2
     subst h2
     simp at *
     grind
   case cons C₁ σ IH =>
-    simp at h1
     subst h1
     rcases List.exists_cons_of_length_eq_add_one h2 with ⟨C₂, τ, τ_def⟩
     subst τ_def
-    simp at h2
+    simp [OSequence.length] at h2
     unfold equiv
     rw [IH]
     grind
 
-lemma equiv_trans {a m ι} {σ : @Sequence n} {h1 : σ.length = m} {κ τ h2 η ρ h3} :
+lemma equiv_trans {a m ι} {σ : @OSequence n} {h1 : σ.length = m} {κ τ h2 η ρ h3} :
       equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩)
     → equiv a (κ, ⟨τ, h2⟩) (η, ⟨ρ, h3⟩)
     → equiv a (ι, ⟨σ, h1⟩) (η, ⟨ρ, h3⟩) := by
+  rcases σ with ⟨σ,o⟩
+  rcases τ with ⟨τ,o'⟩
+  rcases ρ with ⟨ρ,o''⟩
   intro ha hb
   induction σ generalizing m ι κ τ η ρ
-  · simp at h1
-    subst h1
+  · subst h1
     simp at h2 h3
     subst h2 h3
     simp at *
     grind
   case cons C₁ σ IH =>
-    simp at h1
+    simp [OSequence.length]  at h1
     subst h1
     rcases List.exists_cons_of_length_eq_add_one h2 with ⟨C₂, τ, τ_def⟩
     subst τ_def
@@ -351,7 +376,7 @@ lemma equiv_trans {a m ι} {σ : @Sequence n} {h1 : σ.length = m} {κ τ h2 η 
     refine ⟨?_, ?_, ?_⟩
     · simp [equiv] at ha
       simp [equiv] at hb
-      apply IH ha.1 hb.1
+      exact IH _ _ _ _ _ ha.1 hb.1
     · rw [sameRole_of_equiv ha, sameRole_of_equiv hb]
     · grind [equiv]
 
@@ -368,25 +393,31 @@ lemma true_of_knowldege {ι σ a} {φ : @Form n} :
   exact hyp ι σ rfl equiv_refl
 
 /-- Agents know their own initial state. -/
-lemma know_self m σ τ (h1 : σ.length = m) (h2 : τ.length = m) :
+lemma know_self m σ τ (h1 : σ.length = m) (h2 : τ.1.length = m) :
     equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩) → ι a = κ a  := by
+  rcases σ with ⟨σ,o⟩
+  rcases τ with ⟨τ,o'⟩
   induction m generalizing ι κ σ τ
-  · rw [List.length_eq_zero_iff] at h1
-    rw [List.length_eq_zero_iff] at h2
+  · rw [OSequence.length_def, List.length_eq_zero_iff] at h1
+    simp [List.length_eq_zero_iff] at h2
     subst h1 h2
     simp
   case succ n IH =>
     rcases List.exists_cons_of_length_eq_add_one h1 with ⟨c1, σ, σ_def⟩
     rcases List.exists_cons_of_length_eq_add_one h2 with ⟨c2, τ, τ_def⟩
     unfold equiv
-    cases h : roleOfIn a c1 <;> aesop
+    cases h : roleOfIn a c1
+    all_goals
+      simp at h1 h2
+      aesop
 
 /-- Agents are stubborn about their own secrets. -/
 lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a = k := by
+  rcases σ with ⟨σ,o⟩
   simp [eval]
   induction m generalizing σ k ι
   case zero =>
-    rw [List.length_eq_zero_iff] at h
+    rw [OSequence.length_def, List.length_eq_zero_iff] at h
     subst h
     simp
     grind
@@ -402,25 +433,26 @@ lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a =
       subst rh
       constructor
       · rintro ⟨(ak_in|ak_in), not_k⟩
-        · rw [IH _ h] at ak_in; assumption
+        · rw [IH _ (⁻o) h] at ak_in; assumption
         · simp [eval] at not_k
           rcases not_k with ⟨κ, τ, ⟨same, equ⟩, not_in⟩
           have := know_self _ _ _ _ _ equ
-          specialize @IH κ (!k) τ (by grind)
+          specialize @IH κ (!k) τ.1 _ (by aesop)
           aesop
       · intro ak_in
         refine ⟨⟨?_, ?_⟩, ?_⟩
         · left
-          rw [IH _ h]
+          rw [IH _ (⁻o) h]
           assumption
         · intro hyp
           simp [eval] at hyp
-          specialize hyp ι σ rfl equiv_refl
+          specialize hyp ι ⟨σ,⁻o⟩ rfl equiv_refl
+          simp at IH
           grind
-        · refine ⟨ι, σ, ⟨rfl, equiv_refl⟩, ?_⟩
+        · refine ⟨ι, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ?_⟩
           use c_copy
           simp [c_copy, eval]
-          rw [@IH _ _ σ h]
+          rw [@IH _ _ σ (⁻o) h]
           simpa [roleOfIn]
     any_goals -- Callee
       simp at rh
@@ -431,62 +463,65 @@ lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a =
         · simp [eval] at not_k
           rcases not_k with ⟨κ, τ, ⟨same, equ⟩, not_in⟩
           have := know_self _ _ _ _ _ equ
-          specialize @IH κ (!k) τ (by grind)
+          specialize @IH κ (!k) τ.1 _ (by aesop)
           aesop
-        · rw [IH _ h] at ak_in; assumption
+        · rw [IH _ (⁻o) h] at ak_in; assumption
       · intro ak_in
         refine ⟨⟨?_, ?_⟩, ?_⟩
         · right
-          rw [IH _ h]
+          rw [IH _ (⁻o) h]
           assumption
         · intro hyp
           simp [eval] at hyp
-          specialize hyp ι σ rfl equiv_refl
+          specialize hyp ι ⟨σ,⁻o⟩ rfl equiv_refl
+          simp at IH
           grind
-        · refine ⟨ι, σ, (by grind [equiv_refl]), ?_⟩
+        · refine ⟨ι, ⟨σ,⁻o⟩, (by simp; grind [equiv_refl]), ?_⟩
           use c_copy
           simp [c_copy, eval, roleOfIn]
-          rw [@IH _ _ σ h]
+          rw [@IH _ _ σ (⁻o) h]
           simp
           tauto
-    any_goals -- Other, easy
+    all_goals -- Other, easy
       simp at rh
       rcases rh with ⟨rh1,rh2⟩
-      rw [IH _ h]
+      rw [IH _ _ h]
 
-lemma equiv_then_know_same {a m ι} {σ : @Sequence n} {h1 : σ.length = m} {κ τ h2}
+lemma equiv_then_know_same {a m ι} {σ : @OSequence n} {h1 : σ.length = m} {κ τ h2}
     (equ : equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩))
     φ
     : eval ι σ (K a φ) ↔ eval κ τ (K a φ) := by
+  rcases σ with ⟨σ,o⟩
   unfold eval
   simp
   constructor
   · intro hyp η ρ same_len equ'
-    apply hyp η ρ (by aesop)
-    have := @equiv_trans n a m ι σ h1 κ τ h2 η ρ (by grind) equ (by convert equ'; grind)
+    apply hyp η ρ (by simp at h1; aesop)
+    have := @equiv_trans n a m ι ⟨σ,o⟩ h1 κ τ h2 η ρ (by grind) equ (by convert equ'; grind)
     convert this
   · intro hyp η ρ same_len equ'
     apply hyp η ρ (by aesop)
     rw [equiv_symm] at equ
-    have := @equiv_trans n a m κ τ h2 ι σ  h1 η ρ (by grind) equ (by convert equ'; grind)
+    have := @equiv_trans n a m κ τ h2 ι ⟨σ,o⟩ h1 η ρ (by grind) equ (by convert equ'; grind)
     convert this
 
 set_option maxHeartbeats 2000000 in
 /-- Lemma 7 -/
-lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {σ τ : Sequence} :
+lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {σ τ : OSequence} :
     (ι, σ) ~_a (ι', τ)  →  ι⌈σ⌉a = ι'⌈τ⌉a := by
+  rcases σ with ⟨σ,o⟩
+  rcases τ with ⟨τ,o'⟩
   intro ⟨same_len, equ⟩
-  simp at same_len
-  induction σ generalizing τ
+  induction σ generalizing τ o'
   case nil =>
     have := List.length_eq_zero_iff.mp same_len.symm
     aesop
   case cons C σ IH =>
-    simp at same_len
+    simp at IH
     rcases List.exists_cons_of_length_eq_add_one same_len.symm with ⟨D, τ, _def⟩
     subst _def
-    simp only [List.length_cons, equiv, Nat.add_one_sub_one] at equ
-    specialize IH (by grind) equ.1 -- IH now says `ι⌈σ⌉a = ι'⌈τ⌉a`
+    simp only [equiv] at equ
+    specialize IH (⁻o) _ (⁻o') (by simp at same_len; assumption) equ.1 -- IH now says `ι⌈σ⌉a = ι'⌈τ⌉a`
     -- distinguish cases whether/how a is involved in C (and thus also D) or not
     cases r : roleOfIn a C
     case Caller => -- first out of three outer cases
@@ -498,7 +533,7 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {�
       all_goals -- 9 subcases
         rcases same_pair with ⟨_,_⟩
         subst_eqs
-        simp only [List.length_cons, Nat.add_right_cancel_iff] at same_len
+        simp only [OSequence.length_def, List.length_cons, Nat.add_right_cancel_iff] at same_len
         clear Caller_eq
         simp [roleOfIn_a, resultSet]
         ext ⟨d,k⟩
@@ -510,12 +545,12 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {�
         · simp_all [← IH, ← equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨ι2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
           refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
-          · have := equiv_trans (equiv_symm.mp prev_equ) equ2; rw! [same_len] at *; exact this
+          · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
           · rw [← role2]; try simp [roleOfIn]
         · simp_all [equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨ι2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
           refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
-          · apply equiv_trans prev_equ; rw! [same_len]; exact equ2
+          · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
           · rw [← role2]; try simp [roleOfIn]
     case Callee => -- second of three outer cases, very similar to `Caller`
       simp [r] at equ
@@ -527,7 +562,7 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {�
         rcases same_pair with ⟨_,_⟩
         rcases r with ⟨_,_⟩
         subst_eqs
-        simp only [List.length_cons, Nat.add_right_cancel_iff] at same_len
+        simp only [OSequence.length_def, List.length_cons, Nat.add_right_cancel_iff] at same_len
         clear Callee_eq
         simp_all [resultSet]
         ext ⟨d,k⟩
@@ -539,12 +574,12 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {�
         · simp_all [← IH, ← equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨ι2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
           refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
-          · have := equiv_trans (equiv_symm.mp prev_equ) equ2; rw! [same_len] at *; exact this
+          · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
           · rw [← role2]; try simp [roleOfIn]
         · simp_all [equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨ι2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
           refine ⟨ι2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
-          · apply equiv_trans prev_equ; rw! [same_len]; exact equ2
+          · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
           · rw [← role2]; try simp [roleOfIn]
     case Other => -- third out of three outer cases, easy
       unfold resultSet
@@ -566,29 +601,31 @@ lemma local_is_known {a b : @Agent n} (k : Bool) :
     have := indistinguishable_then_same_values ⟨?_, equ⟩ -- using Lemma 7
     <;> grind
 
-/-! NOTE: the remaining lemmas do *not* use Lemma 7 and 8, better reorder them later? -/
+/-! NOTE: the remaining lemmas do *not* use Lemma 7 and 8. -/
 
 /-- Helper for Lemma 9, stronger version using a specific `k` and not `Kv`. -/
 lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
     (hKv : (ι, σ) ⊧ K a (S b (b, k)))
-    (hSub : σ ⊑ τ)
+    (hSub : σ.1 ⊑ τ.1)
     : (ι, τ) ⊧ K a (S b (b, k)) := by
+  rcases σ with ⟨σ,o⟩
+  rcases τ with ⟨τ,o'⟩
   rcases hSub with ⟨ρ, def_τ⟩ -- the `ρ` is called `τ \ σ` in the paper.
-  induction ρ generalizing σ τ ι
+  induction ρ generalizing σ τ ι o'
   · simp_all
   case cons C ρ IH =>
     subst def_τ
-    simp only [forall_apply_eq_imp_iff] at IH
-    simp only at hKv
-    simp only [List.cons_append]
+    simp only at IH hKv
     unfold eval
-    simp only [List.length_cons, Subtype.forall, List.length_append]
+    simp only [List.cons_append, Subtype.forall]
     intro κ τ same_len1 equ
+    rcases τ with ⟨τ,o'⟩
+    simp only [OSequence.length_def, List.length_cons, List.length_append] at same_len1
     -- The usual trick to split a list. Used so often, maybe make it a custom named tactic?
     rcases List.exists_cons_of_length_eq_add_one same_len1 with ⟨Cτ, τ, τ_def⟩
     subst τ_def
-    specialize @IH ι σ hKv
-    rw [stubbornness _ _ same_len1]
+    specialize @IH ι σ _ hKv (ρ ++ σ) sorry rfl -- TODO: `ρ ++ σ` may have at most one error!
+    rw [stubbornness _ ⟨(Cτ :: τ), o'⟩ same_len1]
     unfold equiv at equ
     have know_same := equiv_then_know_same equ.1 (S b (b, k))
     rw [know_same] at IH
@@ -598,8 +635,9 @@ lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
     assumption
 
 /-- Lemma 9. Knowledge of secrets is preserved. -/
+-- FIXME: ⊑ notation directly for `OSequence`?
 lemma knowledge_of_secrets_is_preserved {a b : @Agent n}
-    (hKv : (ι, σ) ⊧ Kv a b) (hSub : σ ⊑ τ) : ((ι, τ) ⊧ Kv a b) := by
+    (hKv : (ι, σ) ⊧ Kv a b) (hSub : σ.1 ⊑ τ.1) : ((ι, τ) ⊧ Kv a b) := by
   unfold eval eval eval at hKv
   rw [← or_iff_not_and_not] at hKv
   simp only at hKv
@@ -638,14 +676,15 @@ lemma knowledge_implies_correct_belief :
   unfold eval eval eval at a_kv_b
   simp only [not_and_or, not_not] at a_kv_b
   rcases a_kv_b with h|h
-  · induction σ
+  · rcases σ with ⟨σ,o⟩
+    induction σ
     · simp_all [eval]
       by_cases b = a
       · aesop
       · exfalso
-        have := h ι rfl
-        have := h (ι.switch b) (by grind [Dist.switch])
-        grind [Dist.switch]
+        have := h ι ⟨[], by simp [maxOne]⟩ (by simp)
+        have := h (ι.switch b) ⟨[], by simp [maxOne]⟩ (by simp) (by simp [Dist.switch]; grind)
+        simp_all [Dist.switch]
     case cons C σ IH =>
       -- need cases what `C` could be and whether it involves `a` and `b` here?
       sorry
