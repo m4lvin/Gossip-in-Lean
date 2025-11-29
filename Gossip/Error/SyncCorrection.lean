@@ -49,10 +49,6 @@ def Call.pair : @Call n → (@Agent n × @Agent n)
 For easy pattern matching this is in *reverse* order: the newest call is the first element. -/
 abbrev Sequence : Type := List (@Call n)
 
-/-- Subsequence relation: τ extends σ.
-Because the lists are with the newest call first, this is defined as σ being a suffix of τ. -/
-notation σ:arg "⊑" τ:arg => σ <:+ τ
-
 /-- Flip the value of the secret of this agent in the given set. -/
 def invert : @Agent n -> Set (@Value n) -> Set (@Value n)
   | i, vs => vs.image (fun (j,b) => if j = i then (j, not b) else (j,b))
@@ -174,6 +170,12 @@ notation "⁻" o:arg => Sequence.maxOne_cons o
 /-- Sequence with at most one error. -/
 def OSequence : Type := @Subtype (@Sequence n) maxOne
 
+/-- Subsequence relation: τ extends σ.
+Because the lists are with the newest call first, this is defined as σ being a suffix of τ. -/
+notation σ:arg "⊑" τ:arg => σ.1 <:+ τ.1
+
+instance : Coe (@OSequence n) (@Sequence n) := ⟨Subtype.val⟩
+
 def OSequence.length (σ : @OSequence n) : Nat := σ.1.length
 
 @[simp]
@@ -274,14 +276,18 @@ end
 notation ι:arg "⌈" σ:arg "⌉" a:arg => resultSet a ι σ
 
 @[simp]
-lemma resultSet_nil {ι i} : @resultSet n i ι ⟨[],o⟩  = { (i, ι i) } := by simp [resultSet]
+lemma resultSet_nil {ι i} :
+    @resultSet n i ι ⟨[],o⟩ = { (i, ι i) } := by
+  simp [resultSet]
 
 @[simp]
-lemma equiv_nil : equiv i (ι, ⟨⟨[],o1⟩,h1⟩) (κ, ⟨⟨[],o2⟩,h2⟩) ↔ ι i = κ i := by simp [equiv]
+lemma equiv_nil :
+    equiv i (ι, ⟨⟨[],o1⟩,h1⟩) (κ, ⟨⟨[],o2⟩,h2⟩) ↔ ι i = κ i := by
+  simp [equiv]
 
 /-! ## Notation and Abbreviations -/
 
-notation ισ:100 "⊧" φ:100 => eval ισ.1 ισ.2 φ
+notation ι:arg "⌈" σ:arg "⌉ " " ⊧ " φ:(arg-1) => eval ι σ φ
 
 /-- An abbreviation to easily say that we have the same length and (can thus say) `equiv`. -/
 def equi (a : @Agent n) (ισ : @Dist n × @OSequence n) (ι'τ : @Dist n × @OSequence n) : Prop :=
@@ -316,6 +322,7 @@ lemma sameRole_of_equiv :
   unfold equiv
   simp_all
 
+@[simp]
 lemma equiv_refl {n} {a : @Agent n} {ι : @Dist n} {k} {σ : { σ : OSequence // σ.length = k }} :
     equiv (a : Agent) (ι, σ) (ι, σ) := by
   unfold equiv
@@ -387,7 +394,7 @@ instance : Equivalence (@equiv n k i) :=
 
 /-- Agents know their own initial state. -/
 lemma true_of_knowldege {ι σ a} {φ : @Form n} :
-    eval ι σ (K a φ) → eval ι σ φ := by
+    ι⌈σ⌉ ⊧ K a φ  → ι⌈σ⌉ ⊧ φ := by
   intro hyp
   simp [eval] at hyp
   exact hyp ι σ rfl equiv_refl
@@ -412,7 +419,9 @@ lemma know_self m σ τ (h1 : σ.length = m) (h2 : τ.1.length = m) :
       aesop
 
 /-- Agents are stubborn about their own secrets. -/
-lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a = k := by
+@[simp]
+lemma stubbornness m σ (h : σ.length = m) :
+    ι⌈σ⌉ ⊧ S a (a, k)  ↔  ι a = k := by
   rcases σ with ⟨σ,o⟩
   simp [eval]
   induction m generalizing σ k ι
@@ -427,8 +436,10 @@ lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a =
     unfold resultSet
     simp
     let c_copy := c
-    cases rh : roleOfIn a c <;> cases c <;> simp <;> simp at h
-    any_goals -- Caller
+    cases rh : roleOfIn a c
+    case Caller =>
+     cases c <;> simp <;> simp at h
+     all_goals
       simp at rh
       subst rh
       constructor
@@ -454,7 +465,9 @@ lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a =
           simp [c_copy, eval]
           rw [@IH _ _ σ (⁻o) h]
           simpa [roleOfIn]
-    any_goals -- Callee
+    case Callee =>
+     cases c <;> simp <;> simp at h
+     all_goals -- Callee
       simp at rh
       rcases rh with ⟨rh1,rh2⟩
       subst rh2
@@ -476,16 +489,25 @@ lemma stubbornness m σ (h : σ.length = m) : eval ι σ (S a (a, k)) ↔ ι a =
           specialize hyp ι ⟨σ,⁻o⟩ rfl equiv_refl
           simp at IH
           grind
-        · refine ⟨ι, ⟨σ,⁻o⟩, (by simp; grind [equiv_refl]), ?_⟩
+        · refine ⟨ι, ⟨σ,⁻o⟩, (by simp), ?_⟩
           use c_copy
           simp [c_copy, eval, roleOfIn]
           rw [@IH _ _ σ (⁻o) h]
           simp
           tauto
-    all_goals -- Other, easy
-      simp at rh
-      rcases rh with ⟨rh1,rh2⟩
-      rw [IH _ _ h]
+    case Other =>
+      cases c <;> simp <;> simp at h
+      all_goals
+        simp at rh
+        rcases rh with ⟨rh1,rh2⟩
+        rw [IH _ _ h]
+
+/-- A useful corollary of `stubbornness`. -/
+@[simp]
+lemma not_notMem_resultSet : (b, ! ι b) ∉ ι⌈σ⌉b := by
+  have := @stubbornness _ ι b (! ι b) _ σ rfl
+  unfold eval at this
+  simp [this]
 
 lemma equiv_then_know_same {a m ι} {σ : @OSequence n} {h1 : σ.length = m} {κ τ h2}
     (equ : equiv a (ι, ⟨σ, h1⟩) (κ, ⟨τ, h2⟩))
@@ -525,7 +547,7 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {�
     -- distinguish cases whether/how a is involved in C (and thus also D) or not
     cases r : roleOfIn a C
     case Caller => -- first out of three outer cases
-      simp [r] at equ
+      simp only [r] at equ
       rcases equ with ⟨prev_equ, Caller_eq, prev_same_contrib, same_pair⟩
       unfold contribSet at prev_same_contrib
       let C_copy := C
@@ -535,7 +557,8 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {�
         subst_eqs
         simp only [OSequence.length_def, List.length_cons, Nat.add_right_cancel_iff] at same_len
         clear Caller_eq
-        simp [roleOfIn_a, resultSet]
+        simp only [roleOfIn_a, resultSet, Subtype.forall, OSequence.length_def,
+          roleOfIn_sndE_eq_Caller_iff, roleOfIn_fstE_eq_Caller_iff, roleOfIn_sndE_eq_Caller_iff]
         ext ⟨d,k⟩
         constructor
         all_goals
@@ -599,15 +622,15 @@ lemma local_is_known {a b : @Agent n} (k : Bool) :
   · simp [valid, eval]
     intro ι σ bk_in κ τ same_len equ
     have := indistinguishable_then_same_values ⟨?_, equ⟩ -- using Lemma 7
-    <;> grind
+    <;> grind only
 
 /-! NOTE: the remaining lemmas do *not* use Lemma 7 and 8. -/
 
 /-- Helper for Lemma 9, stronger version using a specific `k` and not `Kv`. -/
 lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
-    (hKv : (ι, σ) ⊧ K a (S b (b, k)))
-    (hSub : σ.1 ⊑ τ.1)
-    : (ι, τ) ⊧ K a (S b (b, k)) := by
+    (hKv : ι⌈σ⌉ ⊧ K a (S b (b, k)))
+    (hSub : σ ⊑ τ)
+    : ι⌈τ⌉ ⊧ K a (S b (b, k)) := by
   rcases σ with ⟨σ,o⟩
   rcases τ with ⟨τ,o'⟩
   rcases hSub with ⟨ρ, def_τ⟩ -- the `ρ` is called `τ \ σ` in the paper.
@@ -635,15 +658,12 @@ lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
     assumption
 
 /-- Lemma 9. Knowledge of secrets is preserved. -/
--- FIXME: ⊑ notation directly for `OSequence`?
 lemma knowledge_of_secrets_is_preserved {a b : @Agent n}
-    (hKv : (ι, σ) ⊧ Kv a b) (hSub : σ.1 ⊑ τ.1) : ((ι, τ) ⊧ Kv a b) := by
+    (hKv : ι⌈σ⌉ ⊧ Kv a b) (hSub : σ ⊑ τ) : ι⌈τ⌉ ⊧ Kv a b := by
   unfold eval eval eval at hKv
   rw [← or_iff_not_and_not] at hKv
-  simp only at hKv
   unfold eval eval eval
   rw [← or_iff_not_and_not]
-  simp only
   rcases hKv with (h|h)
   · left
     exact @knowledge_of_secrets_is_preserved' n ι σ τ a b true h hSub
@@ -669,35 +689,132 @@ lemma know_your_own : ⊨ Kv a a := by
     rw [know_self _ _ _ _ _ equ] at h
     exact h
 
+/-- Helper for Lemma 11 "iff (call semantics)" -/
+lemma not_in_call_then_invariant_resultSet {a : @Agent n} {C : @Call n}
+    (h : roleOfIn a C = Other) ι σ o
+    : ι⌈⟨C :: σ, o⟩⌉a = ι⌈⟨σ, ⁻o⟩⌉a := by
+  conv => left; unfold resultSet
+  simp [h]
+
+-- FIXME move up
+@[simp]
+lemma OSequence.maxOne {σ : @OSequence n} : maxOne σ.1 := by
+  cases σ; simp_all
+
+/-- Helper for Lemma 11 "iff (semantics of formulas and observation relation)" -/
+lemma not_in_call_then_invariant_kv {a : @Agent n} {C : @Call n}
+    (h : roleOfIn a C = Other) b ι σ o
+    : eval ι ⟨C :: σ,  o⟩ (Kv a b)
+    ↔ eval ι ⟨     σ, ⁻o⟩ (Kv a b) := by
+  constructor
+  · intro know_after
+    unfold eval eval eval at *
+    rw [← @or_iff_not_and_not] at *
+    rcases know_after with know_after|know_after
+    · left
+      simp only [eval, stubbornness, Subtype.forall, OSequence.length_def, List.length_cons] at *
+      intro T τ same_len equ
+      let CnoErr : Call := match C with -- we remove the error from `C` if needed.
+        | ⌜d e⌝ => ⌜d e⌝
+        | ⌜d^c e⌝ => ⌜d e⌝
+        | ⌜d e^c⌝ => ⌜d e⌝
+      have h' : roleOfIn a CnoErr = Other := by unfold CnoErr; cases C <;> simp_all
+      apply know_after T ⟨CnoErr :: τ, ?_⟩ (by simp [OSequence.length]; exact same_len)
+      · unfold equiv; simp [h, h', equ]
+      · unfold CnoErr; cases C <;> simp [maxOne]
+    · right
+      simp only [eval, stubbornness, Subtype.forall, OSequence.length_def, List.length_cons] at *
+      intro T τ same_len equ
+      let CnoErr : Call := match C with -- we remove the error from `C` if needed.
+        | ⌜d e⌝ => ⌜d e⌝
+        | ⌜d^c e⌝ => ⌜d e⌝
+        | ⌜d e^c⌝ => ⌜d e⌝
+      have h' : roleOfIn a CnoErr = Other := by unfold CnoErr; cases C <;> simp_all
+      apply know_after T ⟨CnoErr :: τ, ?_⟩ (by simp [OSequence.length]; exact same_len)
+      · unfold equiv; simp [h, h', equ]
+      · unfold CnoErr; cases C <;> simp [maxOne]
+  · intro hyp
+    apply knowledge_of_secrets_is_preserved hyp
+    simp
+
 /-- Lemma 11 -/
-lemma knowledge_implies_correct_belief :
-    (ι,σ) ⊧ (Kv a b) → (b, ι b) ∈ (resultSet a ι σ) := by
+lemma knowledge_implies_correct_belief {n} {ι : @Dist n} {σ : @OSequence n} {a b : @Agent n} :
+    ι⌈σ⌉ ⊧ (Kv a b) → (b, ι b) ∈ ι⌈σ⌉a := by
   intro a_kv_b
-  unfold eval eval eval at a_kv_b
-  simp only [not_and_or, not_not] at a_kv_b
-  rcases a_kv_b with h|h
-  · rcases σ with ⟨σ,o⟩
-    induction σ
-    · simp_all [eval]
+  rcases σ with ⟨σ,o⟩
+  induction σ
+  case nil =>
+    unfold eval eval eval at a_kv_b
+    simp only [not_and_or, not_not] at a_kv_b
+    rcases a_kv_b with h|h
+    all_goals
+      simp_all [eval]
       by_cases b = a
       · aesop
       · exfalso
         have := h ι ⟨[], by simp [maxOne]⟩ (by simp)
         have := h (ι.switch b) ⟨[], by simp [maxOne]⟩ (by simp) (by simp [Dist.switch]; grind)
         simp_all [Dist.switch]
-    case cons C σ IH =>
-      -- need cases what `C` could be and whether it involves `a` and `b` here?
+  case cons C σ IH =>
+    cases ra : roleOfIn a C -- "For σ = τ.acᴷ ..."
+    case Caller =>
+      -- "... we distinguish two cases."
+      by_cases h : eval ι ⟨σ,⁻o⟩ (Kv a b)
+      · -- "Either already ...""
+        specialize IH (⁻o) h
+        unfold resultSet
+        let C_copy := C
+        cases C <;> simp [ra] <;> simp at ra <;> subst ra
+        all_goals
+          refine ⟨⟨?_, ?_⟩, ?_⟩
+          · left; assumption
+          · simp only [eval, stubbornness, Subtype.forall, OSequence.length_def, not_forall,
+              Bool.not_eq_not]
+            use ι
+            simp only [exists_prop, and_true]
+            use ⟨σ,⁻o⟩
+            simp
+          · use ι, ⟨σ,⁻o⟩; simp; use C_copy; unfold C_copy; simp [roleOfIn]
+      · -- "Or ..."
+        simp [eval] at h
+        -- "The assumption ... then implies that ..."
+        -- TODO NEXT
+        sorry
+    case Callee =>
+      -- analogous?
       sorry
-  · -- analogous?
+    case Other => -- "where b,c ≠ a"
+      rw [not_in_call_then_invariant_kv ra b ι σ o] at a_kv_b
+      specialize IH (⁻o) a_kv_b -- induction
+      rw [not_in_call_then_invariant_resultSet ra ι σ o]
+      assumption
+
+/-- Initial distribution with all values set to true. -/
+def ini (n : Nat) : @Dist n := fun _ => true
+
+-- FIXME: make it easier to define a state / give a sequence without writing `simp [maxOne]`.
+
+/-- Correct belief need not imply knowledge: given `ini 2`, after an initial call
+`ab` agent `a` correclty believes `b`, but a does not know the secret of `b`, because `a`
+also considers it possible that the call was `a b^b` instead. -/
+example (a b : Agent) (h : a ≠ b) : eval (ini 2) ⟨[ ⌜a b⌝ ], by simp [maxOne]⟩ $
+      (   S a (b,true  )) -- a believes b
+    ⋀ (¬'(S a (b,false)))
+    ⋀ (   S b (b,true  )) -- correctly
+    ⋀ (¬'(Kv a b)) -- but a does not *know* the value of b
+    := by
+  unfold ini
+  unfold eval
+  constructor
+  · simp [eval, resultSet, contribSet]
     sorry
+  · unfold eval
+    constructor
+    · simp [eval, resultSet, contribSet]
+    · simp_all [eval]
+      sorry
 
-/-
-TODO: example
-We recall that correct belief need not imply knowledge: given I = a|b, after an initial call
-ab agent a believes b, ba ∧ ¬ba, and even correctly believes that, as bb ∧ ba ∧ ¬ba. But a
-does not know the secret of b, as (a|b, ab) ∼a (a|b, abb ).
--/
-
+-- check statement / is this Lemma 12 or is it a helper for it?
 lemma corollary_12 {a b : @Agent n} (k : Bool) :
       ⊨ ((     S a ⟨b,k⟩ ) ⟹ (K a (     S a ⟨b,k⟩) ))
     ∧ ⊨ ((Neg (S a ⟨b,k⟩)) ⟹ (K a (Neg (S a ⟨b,k⟩)))) := by
@@ -710,8 +827,6 @@ lemma corollary_twelve {a b : @Agent n} :
   constructor
   · simp [valid, eval]
     intro ι σ lhs
-
-
     sorry
   · sorry
 
@@ -719,12 +834,6 @@ lemma corollary_twelve {a b : @Agent n} :
 
 Corollary 13 |= Ka bb ↔ Ka (bb ∧ ba ∧ ¬ba) and |= Ka bb ↔ Ka(bb ∧ ¬ba ∧ ba).
  ⊣
-
-Still to do:
-
-/-- Corollary 12 -/
-
-/-- Corollary 13 -/
 
 Examples?
 
