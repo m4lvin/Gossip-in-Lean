@@ -151,12 +151,18 @@ def errFree : @Sequence n → Prop
   | ⌜_^_ _⌝ :: _ => False
   | ⌜_ _^_⌝ :: _ => False
 
+@[simp]
+lemma errFree_nil : @errFree n [] := by simp [errFree]
+
 /-- This sequence contains at most one transmission error. -/
 def maxOne : @Sequence n → Prop
   | [] => True
   | ⌜_   _⌝ :: rest => maxOne rest
   | ⌜_^_ _⌝ :: rest => errFree rest
   | ⌜_ _^_⌝ :: rest => errFree rest
+
+@[simp]
+lemma maxOne_nil : @maxOne n [] := by simp [maxOne]
 
 @[aesop unsafe apply]
 lemma Sequence.maxOne_of_errFree : errFree σ → maxOne σ := by
@@ -646,16 +652,17 @@ lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
   · simp_all
   case cons C ρ IH =>
     subst def_τ
+    have ρσ_o : maxOne (ρ ++ σ) := by exact ⁻o'
     simp only at IH hKv
     unfold eval
     simp only [List.cons_append, Subtype.forall]
     intro T τ same_len1 equ
     rcases τ with ⟨τ,o'⟩
     simp only [OSequence.length_def, List.length_cons, List.length_append] at same_len1
-    -- The usual trick to split a list. Used so often, maybe make it a custom named tactic?
+    -- The usual trick to split a list.
     rcases List.exists_cons_of_length_eq_add_one same_len1 with ⟨Cτ, τ, τ_def⟩
     subst τ_def
-    specialize @IH S σ _ hKv (ρ ++ σ) sorry rfl -- TODO: `ρ ++ σ` may have at most one error!
+    specialize @IH S σ _ hKv (ρ ++ σ) ρσ_o rfl
     rw [stubbornness _ ⟨(Cτ :: τ), o'⟩ same_len1]
     unfold equiv at equ
     have know_same := equiv_then_know_same equ.1 ((b, k) @ b)
@@ -806,22 +813,40 @@ def ini (n : Nat) : @Dist n := fun _ => true
 /-- Correct belief need not imply knowledge: given `ini 2`, after an initial call
 `ab` agent `a` correclty believes `b`, but a does not know the secret of `b`, because `a`
 also considers it possible that the call was `a b^b` instead. -/
-example (a b : Agent) (h : a ≠ b) : eval (ini 2) ⟨[ ⌜a b⌝ ], by simp [maxOne]⟩ $
-      (   (b,true ) @ a) -- a believes b
-    ⋀ (¬'((b,false) @ a))
-    ⋀ (   (b,true  )@ b) -- correctly
-    ⋀ (¬'(Kv a b)) -- but a does not *know* the value of b
+lemma example_correct_belief_does_not_imply_knowledege (a b : Agent) (h : a ≠ b) :
+    eval (ini 2) ⟨[ ⌜a b⌝ ], by simp [maxOne]⟩ $
+      (    b @ a)  -- a believes b
+    ⋀ (¬'(‾b @ a)) -- (and does not believe not-b)
+    ⋀ (   b @ b)   -- correctly,
+    ⋀ (¬'(Kv a b)) -- but a does not *know* the value of b.
     := by
   unfold ini
   unfold eval
   constructor
   · simp [eval, resultSet, contribSet]
-    sorry
+    constructor
+    · use ini 2
+      unfold ini
+      simp only [and_true]
+      use ⟨[], maxOne_nil⟩
+      simp
+    · refine ⟨_, _, ⟨ ⟨ ?_, equiv_refl⟩ , ?_ ⟩  ⟩ <;> simp
+      use ⌜a b⌝
+      simp [contribSet]
   · unfold eval
     constructor
     · simp [eval, resultSet, contribSet]
     · simp_all [eval]
-      sorry
+      use (ini 2).switch b
+      simp only [Dist.switch, ini, Bool.not_true, Bool.if_true_right, Bool.or_false, ↓reduceIte,
+        true_and]
+      constructor
+      · use ⟨[⌜a b^b⌝], by simp [maxOne]⟩
+        simp_all [equiv, roleOfIn, contribSet, invert, Call.pair]
+      · use ini 2
+        simp only [ini, and_true]
+        use ⟨[⌜a b⌝], by simp [maxOne]⟩
+        simp_all [equiv, roleOfIn, contribSet, Call.pair, ini]
 
 lemma corollary_twelve {a b : @Agent n} :
       ⊨ ( (K a ( b @ b)) ⟹ (( b @ b) ⋀ ( b @ a) ⋀ (¬' (‾b @ a))) )
