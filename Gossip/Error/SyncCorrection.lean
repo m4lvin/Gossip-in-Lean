@@ -19,8 +19,12 @@ abbrev Agent : Type := Fin n
 
 abbrev Value : Type := (@Agent n × Bool)
 
-/-- We allow writing just the agent "a" for the value "(a, true)". -/
+/-- We allow writing just the agent `a` for the value `⟨a, true⟩`. -/
 instance : Coe (@Agent n) (@Value n) := ⟨fun a => ⟨a,true⟩⟩
+
+set_option quotPrecheck false in
+/-- We write `‾a` for the value `⟨a, false⟩`. -/
+notation "‾" a:arg => ⟨a, false⟩
 
 /-- An *initial* secret distribution, each agent only has their own value. -/
 abbrev Dist := @Agent n → Bool
@@ -63,28 +67,32 @@ inductive Form : Type
   | Con : Form → Form → Form
   /-- Negation -/
   | Neg : Form → Form
-  /-- `S a (b, k)` means agent `a` has value `k` of agent `b`. -/
-  | S : (a : @Agent n) → (@Value n) → Form
+  /-- `B a (b, k)` means agent `a` has value `k` of agent `b`. -/
+  | Has : (a : @Agent n) → (@Value n) → Form
   /-- `K a φ` means agent `a` knows that `φ` is true. -/
   | K : (a : @Agent n) → (φ : Form) → Form
 
 open Form
 
-notation "¬'" φ:arg => Neg φ
+notation " ¬'" φ:arg => Neg φ
 
-infixr:60 "⋀" => Con
+infixr:60 " ⋀ " => Con
 
-notation φ1:arg "⋁" φ2:arg => Neg (Con (Neg φ1) (Neg φ2))
+notation φ1:arg " ⋁ " φ2:arg => Neg (Con (Neg φ1) (Neg φ2))
 notation φ1:arg "⟹" φ2:arg => (Neg φ1) ⋁ φ2
+notation φ1:(arg-1) " ⇔ " φ2:(arg-1) => Con (φ1 ⟹ φ2) (φ2 ⟹ φ1)
 
-notation "Kv" a:arg b:arg => (K a (S b (b, true))) ⋁ (K a (S b (b,false)))
+/-- We write `v @ a` to say that agent `a` has value `v`. -/
+notation v:(arg-1) "@" a:arg => Has a v
+
+notation "Kv" a:arg b:arg => (K a (b @ b)) ⋁ (K a (‾b @ b))
 
 @[simp]
 def Form.length : @Form n → Nat
   | Top => 0
   | Con φ1 φ2 => 1 + φ1.length + φ2.length
   | Neg φ => 1 + φ.length
-  | S _ _ => 1
+  | Has _ _ => 1
   | K _ φ => 1 + φ.length
 
 /-! ## Roles -/
@@ -196,13 +204,13 @@ def resultSet (i : @Agent n) : @Dist n → @OSequence n → Set (@Value n)
   | ι, ⟨[],_⟩ => { (i, ι i) } -- for the basis, ι[ε] = ι
   | ι, ⟨(C :: σ),o⟩ =>
     /- (*) Values that `i` already knows to be wrong before the call (and can thus refuse). -/
-    let refuse : Set Value := { ⟨j, d⟩ | eval ι ⟨σ,⁻o⟩ (K i (S j (j, !d))) }
+    let refuse : Set Value := { ⟨j, d⟩ | eval ι ⟨σ,⁻o⟩ (K i (Has j (j, !d))) }
     /- (**) Values that `i` knows to be wrong after the call (and can thus delete).
     The `sel` here decides which part of `contribSet` agent `a` may see (namely: not its own). -/
     let delete sel : Set Value := { ⟨j, d⟩ | ∀ ι' τ D, equiv i (ι,⟨⟨σ,⁻o⟩,rfl⟩) (ι',τ)
                                                 → roleOfIn i C = roleOfIn i D
                                                 → sel (contribSet ι ⟨σ,⁻o⟩ C) = sel (contribSet ι' τ D)
-                                                → eval ι' τ (S j (j, !d)) }
+                                                → eval ι' τ (Has j (j, !d)) }
     match C, roleOfIn i C with
       -- Not involved:
       | _, Other => resultSet i ι ⟨σ,⁻o⟩
@@ -256,7 +264,7 @@ decreasing_by
 def eval : @Dist n → @OSequence n → @Form n → Prop
   | _, _, .Top => True
   | ι, σ, .Neg φ => ¬ eval ι σ φ
-  | ι, σ, .S a (j, k) => (j, k) ∈ resultSet a ι σ
+  | ι, σ, .Has a (j, k) => (j, k) ∈ resultSet a ι σ
   | ι, σ, .Con φ ψ => eval ι σ φ ∧ eval ι σ ψ
   | ι, σ, .K a φ => ∀ t, ∀ τ , (he : equiv a (ι,⟨σ,rfl⟩) (t,τ)) → eval t τ φ
 termination_by
@@ -421,7 +429,7 @@ lemma know_self m σ τ (h1 : σ.length = m) (h2 : τ.1.length = m) :
 /-- Agents are stubborn about their own secrets. -/
 @[simp]
 lemma stubbornness m σ (h : σ.length = m) :
-    ι⌈σ⌉ ⊧ S a (a, k)  ↔  ι a = k := by
+    ι⌈σ⌉ ⊧ (a, k) @ a  ↔  ι a = k := by
   rcases σ with ⟨σ,o⟩
   simp [eval]
   induction m generalizing σ k ι
@@ -615,8 +623,8 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {ι ι': @Dist n} {�
 /-- Lemma 8. The truth value of any "a has ..." atom is known by a.
 Note that `k` here says whether we have b or \overline{b}. -/
 lemma local_is_known {a b : @Agent n} (k : Bool) :
-      ⊨ ((     S a ⟨b,k⟩ ) ⟹ (K a (     S a ⟨b,k⟩) ))
-    ∧ ⊨ ((Neg (S a ⟨b,k⟩)) ⟹ (K a (Neg (S a ⟨b,k⟩)))) := by
+      ⊨ ((     ⟨b,k⟩ @ a ) ⟹ (K a (     ⟨b,k⟩ @ a) ))
+    ∧ ⊨ ((Neg (⟨b,k⟩ @ a)) ⟹ (K a (Neg (⟨b,k⟩ @ a)))) := by
   constructor
   all_goals
   · simp [valid, eval]
@@ -628,9 +636,9 @@ lemma local_is_known {a b : @Agent n} (k : Bool) :
 
 /-- Helper for Lemma 9, stronger version using a specific `k` and not `Kv`. -/
 lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
-    (hKv : ι⌈σ⌉ ⊧ K a (S b (b, k)))
+    (hKv : ι⌈σ⌉ ⊧ K a ((b,k) @ b))
     (hSub : σ ⊑ τ)
-    : ι⌈τ⌉ ⊧ K a (S b (b, k)) := by
+    : ι⌈τ⌉ ⊧ K a ((b,k) @ b) := by
   rcases σ with ⟨σ,o⟩
   rcases τ with ⟨τ,o'⟩
   rcases hSub with ⟨ρ, def_τ⟩ -- the `ρ` is called `τ \ σ` in the paper.
@@ -650,7 +658,7 @@ lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
     specialize @IH ι σ _ hKv (ρ ++ σ) sorry rfl -- TODO: `ρ ++ σ` may have at most one error!
     rw [stubbornness _ ⟨(Cτ :: τ), o'⟩ same_len1]
     unfold equiv at equ
-    have know_same := equiv_then_know_same equ.1 (S b (b, k))
+    have know_same := equiv_then_know_same equ.1 ((b, k) @ b)
     rw [know_same] at IH
     have := true_of_knowldege IH
     simp only at this
@@ -671,7 +679,8 @@ lemma knowledge_of_secrets_is_preserved {a b : @Agent n}
     exact @knowledge_of_secrets_is_preserved' n ι σ τ a b false h hSub
 
 /-- Lemma 10. Agents know their own value. Follows from `stubbornness`. -/
-lemma know_your_own : ⊨ Kv a a := by
+lemma know_your_own {a : @Agent n} :
+    ⊨ Kv a a := by
   intro ι σ
   unfold eval eval eval
   rw [← @or_iff_not_and_not]
@@ -798,9 +807,9 @@ def ini (n : Nat) : @Dist n := fun _ => true
 `ab` agent `a` correclty believes `b`, but a does not know the secret of `b`, because `a`
 also considers it possible that the call was `a b^b` instead. -/
 example (a b : Agent) (h : a ≠ b) : eval (ini 2) ⟨[ ⌜a b⌝ ], by simp [maxOne]⟩ $
-      (   S a (b,true  )) -- a believes b
-    ⋀ (¬'(S a (b,false)))
-    ⋀ (   S b (b,true  )) -- correctly
+      (   (b,true ) @ a) -- a believes b
+    ⋀ (¬'((b,false) @ a))
+    ⋀ (   (b,true  )@ b) -- correctly
     ⋀ (¬'(Kv a b)) -- but a does not *know* the value of b
     := by
   unfold ini
@@ -814,15 +823,9 @@ example (a b : Agent) (h : a ≠ b) : eval (ini 2) ⟨[ ⌜a b⌝ ], by simp [ma
     · simp_all [eval]
       sorry
 
--- check statement / is this Lemma 12 or is it a helper for it?
-lemma corollary_12 {a b : @Agent n} (k : Bool) :
-      ⊨ ((     S a ⟨b,k⟩ ) ⟹ (K a (     S a ⟨b,k⟩) ))
-    ∧ ⊨ ((Neg (S a ⟨b,k⟩)) ⟹ (K a (Neg (S a ⟨b,k⟩)))) := by
-  sorry
-
 lemma corollary_twelve {a b : @Agent n} :
-      ⊨ ( (K a (S b (b,true ))) ⟹ ((S b (b,true)) ⋀ (S a (b,true)) ⋀ (¬' (S a (b,false)))) )
-    ∧ ⊨ ( (K a (S b (b,false))) ⟹ ((S b (b,true)) ⋀ (S a (b,true)) ⋀ (¬' (S a (b,false)))) )
+      ⊨ ( (K a ( b @ b)) ⟹ (( b @ b) ⋀ ( b @ a) ⋀ (¬' (‾b @ a))) )
+    ∧ ⊨ ( (K a (‾b @ b)) ⟹ ((‾b @ b) ⋀ (‾b @ a) ⋀ (¬' ( b @ a))) )
     := by
   constructor
   · simp [valid, eval]
@@ -830,10 +833,15 @@ lemma corollary_twelve {a b : @Agent n} :
     sorry
   · sorry
 
-/-!
+lemma corollary_thirteen {a b : @Agent n} :
+      ⊨ ( (K a ( b @ b)) ⇔ K a (( b @ b) ⋀ ( b @ a) ⋀ (¬' (‾b @ a))) )
+    ∧ ⊨ ( (K a (‾b @ b)) ⇔ K a ((‾b @ b) ⋀ (‾b @ a) ⋀ (¬' ( b @ a))) )
+    := by
+  constructor
+  · sorry
+  · sorry
 
-Corollary 13 |= Ka bb ↔ Ka (bb ∧ ba ∧ ¬ba) and |= Ka bb ↔ Ka(bb ∧ ¬ba ∧ ba).
- ⊣
+/-!
 
 Examples?
 
