@@ -74,19 +74,6 @@ inductive Form : Type
 
 open Form
 
-notation " ¬'" φ:arg => Neg φ
-
-infixr:60 " ⋀ " => Con
-
-notation φ1:arg " ⋁ " φ2:arg => Neg (Con (Neg φ1) (Neg φ2))
-notation φ1:arg "⟹" φ2:arg => (Neg φ1) ⋁ φ2
-notation φ1:(arg-1) " ⇔ " φ2:(arg-1) => Con (φ1 ⟹ φ2) (φ2 ⟹ φ1)
-
-/-- We write `v @ a` to say that agent `a` has value `v`. -/
-notation v:(arg-1) "@" a:arg => Has a v
-
-notation "Kv" a:arg b:arg => (K a (b @ b)) ⋁ (K a (‾b @ b))
-
 @[simp]
 def Form.length : @Form n → Nat
   | Top => 0
@@ -233,7 +220,7 @@ termination_by
   _ σ => (σ.length, 0) -- should be below contribSet
 decreasing_by
   all_goals
-    apply Prod.Lex.left; grind [OSequence.length] -- sequence becomes shorter in all recursive calls!
+    apply Prod.Lex.left; grind [OSequence.length] -- Sequence becomes shorter in all cases.
 
 /-- Right after sequence `σ`, what values will caller and callee contribute to the call? -/
 def contribSet (S : @Dist n) (σ : @OSequence n) : @Call n → Set (@Value n) × Set (@Value n)
@@ -248,17 +235,17 @@ decreasing_by
 
 /-- (Def 5) Observation relation.
 This is *synchronous*. -/
-def equiv {k} (a : @Agent n) :
-    (@Dist n × {σ : @OSequence n // σ.length = k}) → (@Dist n × {σ : @OSequence n // σ.length = k}) → Prop
+def equiv {k} (a : @Agent n) : (@Dist n × {σ : @OSequence n // σ.length = k})
+                                        → (@Dist n × {σ : @OSequence n // σ.length = k}) → Prop
   | (S, ⟨⟨[]    ,_⟩,_⟩), (T, ⟨⟨[]    ,_⟩,_⟩) => S a = T a
   | (S, ⟨⟨C :: σ,o⟩,_⟩), (T, ⟨⟨D :: τ,q⟩,_⟩) =>
-                          @equiv (k-1) a (S,⟨⟨σ,⁻o⟩, by grind [OSequence.length]⟩) (T,⟨⟨τ,⁻q⟩, by grind [OSequence.length]⟩)
-                        ∧ roleOfIn a C = roleOfIn a D
-                        -- Depending on role, observe (contribSet of) the other agent in the call
-                        ∧ match roleOfIn a C with
-                          | Other => True
-                          | Caller => (contribSet S ⟨σ,⁻o⟩ C).2 = (contribSet T ⟨τ,⁻q⟩ D).2 ∧ C.pair = D.pair
-                          | Callee => (contribSet S ⟨σ,⁻o⟩ C).1 = (contribSet T ⟨τ,⁻q⟩ D).1 ∧ C.pair = D.pair
+        @equiv (k-1) a (S,⟨⟨σ,⁻o⟩, by grind [OSequence.length]⟩) (T,⟨⟨τ,⁻q⟩, by grind [OSequence.length]⟩)
+      ∧ roleOfIn a C = roleOfIn a D
+      -- Depending on role, observe (contribSet of) the other agent in the call
+      ∧ match roleOfIn a C with
+        | Other => True
+        | Caller => (contribSet S ⟨σ,⁻o⟩ C).2 = (contribSet T ⟨τ,⁻q⟩ D).2 ∧ C.pair = D.pair
+        | Callee => (contribSet S ⟨σ,⁻o⟩ C).1 = (contribSet T ⟨τ,⁻q⟩ D).1 ∧ C.pair = D.pair
 
 termination_by
   Sσ _ => (Sσ.2.1.length, 0) -- should be above contribSet
@@ -275,13 +262,13 @@ def eval : @Dist n → @OSequence n → @Form n → Prop
   | S, σ, .K a φ => ∀ t, ∀ τ , (he : equiv a (S,⟨σ,rfl⟩) (t,τ)) → eval t τ φ
 termination_by
   _ σ φ => (σ.length, φ.length)
-decreasing_by -- Sequence (length) stays the same, but formula becomes simpler in all cases.
+decreasing_by -- Sequence length stays the same, but formula becomes shorter.
   · apply Prod.Lex.right; simp
-  · apply Prod.Lex.right; simp -- Here we need `resultSet  <  Has i i`
+  · apply Prod.Lex.right; simp -- Here we need `resultSet  <  Has i i`.
   · apply Prod.Lex.right; simp; linarith
   · apply Prod.Lex.right; simp
-  · apply Prod.Lex.right; simp -- Here we need `equiv  <  K i φ`
-  · rw [τ.2] -- The trick!
+  · apply Prod.Lex.right; simp -- Here we need `equiv  <  K i φ`.
+  · rw [τ.2] -- Here `σ` and `τ` must have the same length.
     apply Prod.Lex.right
     simp_wf
 
@@ -301,7 +288,39 @@ lemma equiv_nil :
 
 /-! ## Notation and Abbreviations -/
 
+prefix:70 " ¬'" => Form.Neg
+
+infixr:60 " ⋀ " => Form.Con
+
+notation φ1:arg " ⋁ " φ2:arg => Neg (Con (Neg φ1) (Neg φ2))
+notation φ1:arg "⟹" φ2:arg => (Neg φ1) ⋁ φ2
+notation φ1:(arg-1) " ⇔ " φ2:(arg-1) => Con (φ1 ⟹ φ2) (φ2 ⟹ φ1)
+
+/-- We write `v @ a` to say that agent `a` has value `v`. -/
+notation v:(arg-1) "@" a:arg => Has a v
+
+notation "Kv" a:arg b:arg => (K a (b @ b)) ⋁ (K a (‾b @ b))
+
 notation S:arg "⌈" σ:arg "⌉ " " ⊧ " φ:(arg-1) => eval S σ φ
+
+/-- Validity of formulas -/
+def valid (φ : @Form n) := ∀ S σ, eval S σ φ
+
+prefix:100 "⊨ " => valid -- FIXME what's a good precedence value here?
+
+-- @[simp]
+lemma eval_biimpl : S⌈σ⌉ ⊧ φ1 ⇔ φ2 ↔ (S⌈σ⌉ ⊧ φ1 ↔ S⌈σ⌉ ⊧ φ2) := by
+  simp [eval]; tauto
+
+-- @[simp]
+lemma eval_impl : S⌈σ⌉ ⊧ φ1 ⟹ φ2 ↔ (S⌈σ⌉ ⊧ φ1 → S⌈σ⌉ ⊧ φ2) := by
+  simp [eval]
+
+-- @[simp]
+lemma eval_dis : S⌈σ⌉ ⊧ φ1 ⋁ φ2 ↔ S⌈σ⌉ ⊧ φ1 ∨ S⌈σ⌉ ⊧ φ2 := by
+  simp [eval]; tauto
+
+/-! ## The observation relation is an equivalence -/
 
 /-- An abbreviation to easily say that we have the same length and (can thus say) `equiv`. -/
 def equi (a : @Agent n) (Sσ : @Dist n × @OSequence n) (Tτ : @Dist n × @OSequence n) : Prop :=
@@ -322,13 +341,6 @@ lemma equiv_of_equi :
   rintro ⟨h, equ⟩
   convert equ
   linarith
-
-/-- Validity of formulas -/
-def valid (φ : @Form n) := ∀ S σ, eval S σ φ
-
-prefix:100 "⊨ " => valid -- FIXME what's a good precedence value here?
-
-/-! ## Properties of the Semantics -/
 
 lemma sameRole_of_equiv :
     equiv a (S, ⟨⟨C₁ :: σ, o1⟩, h1⟩) (T, ⟨⟨C₂ :: τ, o2⟩ , h2⟩) →
@@ -401,14 +413,15 @@ lemma equiv_trans {a m S} {σ : @OSequence n} {h1 : σ.length = m} {T τ h2 R ρ
     · rw [sameRole_of_equiv ha, sameRole_of_equiv hb]
     · grind [equiv]
 
-instance : Equivalence (@equiv n k i) :=
-  ⟨ fun _ => equiv_refl
-  , equiv_symm.mp
-  , equiv_trans ⟩
+/-- The observation relation `equiv` $∼_a$ is an equivalence relation. -/
+theorem equiv_Equivalence : Equivalence (@equiv n k i) :=
+  ⟨fun _ => equiv_refl, equiv_symm.mp, equiv_trans⟩
+
+/-! ## Properties of the Semantics -/
 
 /-- Agents know their own initial state. -/
 lemma true_of_knowldege {S σ a} {φ : @Form n} :
-    S⌈σ⌉ ⊧ K a φ  → S⌈σ⌉ ⊧ φ := by
+    S⌈σ⌉ ⊧ K a φ  →  S⌈σ⌉ ⊧ φ := by
   intro hyp
   simp [eval] at hyp
   exact hyp S σ rfl equiv_refl
@@ -626,14 +639,14 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
       simp only
       exact IH
 
-/-- Lemma 8. The truth value of any "a has ..." atom is known by a.
-Note that `k` here says whether we have b or \overline{b}. -/
+/-- Lemma 8. The truth value of any $b_a$ atom is known by agent $a$.
+Note that `k` here says whether we have $b$ or $\overline{b}$. -/
 lemma local_is_known {a b : @Agent n} (k : Bool) :
       ⊨ ((     ⟨b,k⟩ @ a ) ⟹ (K a (     ⟨b,k⟩ @ a) ))
     ∧ ⊨ ((Neg (⟨b,k⟩ @ a)) ⟹ (K a (Neg (⟨b,k⟩ @ a)))) := by
   constructor
   all_goals
-  · simp [valid, eval]
+  · simp only [valid, eval, not_not, Subtype.forall, not_forall, not_and, not_exists]
     intro S σ bk_in T τ same_len equ
     have := indistinguishable_then_same_values ⟨?_, equ⟩ -- using Lemma 7
     <;> grind only
