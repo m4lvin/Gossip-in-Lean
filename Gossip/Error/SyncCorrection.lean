@@ -62,12 +62,12 @@ def invert : @Agent n -> Set (@Value n) -> Set (@Value n)
 /-- (Def 3) Logical language -/
 inductive Form : Type
   /-- True constant -/
-  | Top : Form -- ⊤
+  | Top : Form
   /-- Conjunction -/
   | Con : Form → Form → Form
   /-- Negation -/
   | Neg : Form → Form
-  /-- `B a (b, k)` means agent `a` has value `k` of agent `b`. -/
+  /-- `Has a (b, k)` means agent `a` has value `k` of agent `b`. -/
   | Has : (a : @Agent n) → (@Value n) → Form
   /-- `K a φ` means agent `a` knows that `φ` is true. -/
   | K : (a : @Agent n) → (φ : Form) → Form
@@ -259,7 +259,7 @@ def eval : @Dist n → @OSequence n → @Form n → Prop
   | S, σ, .Neg φ => ¬ eval S σ φ
   | S, σ, .Has a (j, k) => (j, k) ∈ resultSet a S σ
   | S, σ, .Con φ ψ => eval S σ φ ∧ eval S σ ψ
-  | S, σ, .K a φ => ∀ t, ∀ τ , (he : equiv a (S,⟨σ,rfl⟩) (t,τ)) → eval t τ φ
+  | S, σ, .K a φ => ∀ T, ∀ τ , (he : equiv a (S,⟨σ,rfl⟩) (T,τ)) → eval T τ φ
 termination_by
   _ σ φ => (σ.length, φ.length)
 decreasing_by -- Sequence length stays the same, but formula becomes shorter.
@@ -419,7 +419,7 @@ theorem equiv_Equivalence : Equivalence (@equiv n k i) :=
 
 /-! ## Properties of the Semantics -/
 
-/-- Agents know their own initial state. -/
+/-- Knowledge is truthful. This follows from `equiv_refl`. -/
 lemma true_of_knowldege {S σ a} {φ : @Form n} :
     S⌈σ⌉ ⊧ K a φ  →  S⌈σ⌉ ⊧ φ := by
   intro hyp
@@ -768,7 +768,7 @@ lemma not_in_call_then_invariant_kv {a : @Agent n} {C : @Call n}
 
 /-- Lemma 11 -/
 lemma knowledge_implies_correct_belief {n} {S : @Dist n} {σ : @OSequence n} {a b : @Agent n} :
-    S⌈σ⌉ ⊧ (Kv a b) → (b, S b) ∈ S⌈σ⌉a := by
+    S⌈σ⌉ ⊧ (Kv a b) → ((b, S b) ∈ S⌈σ⌉a ∧ (b, ! S b) ∉ S⌈σ⌉a) := by
   intro a_kv_b
   rcases σ with ⟨σ,o⟩
   induction σ
@@ -792,23 +792,41 @@ lemma knowledge_implies_correct_belief {n} {S : @Dist n} {σ : @OSequence n} {a 
       · -- "Either already ...""
         specialize IH (⁻o) h
         unfold resultSet
+        simp only [ra, stubbornness, Subtype.forall, OSequence.length_def]
         let C_copy := C
-        cases C <;> simp [ra] <;> simp at ra <;> subst ra
+        cases C <;> simp_all <;> subst ra
         all_goals
           refine ⟨⟨?_, ?_⟩, ?_⟩
-          · left; assumption
-          · simp only [eval, stubbornness, Subtype.forall, OSequence.length_def, not_forall,
+          · simp [eval, stubbornness, Subtype.forall, OSequence.length_def, not_forall,
               Bool.not_eq_not]
             use S
-            simp only [exists_prop, and_true]
+            simp only [and_true]
             use ⟨σ,⁻o⟩
             simp
           · use S, ⟨σ,⁻o⟩; simp; use C_copy; unfold C_copy; simp [roleOfIn]
+          · rw [eval_dis] at h
+            intro not_in_callee not_a_knows T τ same_len equ
+            cases h_b : S b
+            all_goals
+              exfalso
+              simp_all only [Bool.not_false, Bool.not_true, or_false, false_or]
+              have := true_of_knowldege h
+              simp_all
       · -- "Or ..."
-        simp [eval] at h
-        -- "The assumption ... then implies that ..."
-        -- TODO NEXT
-        sorry
+        rw [eval_dis] at h
+        push_neg at h
+        rcases h with ⟨a_not_know_before_t, a_not_know_before_f⟩
+        rw [eval_dis] at a_kv_b
+        -- "The assumption ... then implies that agent a obtained knowledge ... in the call" `C`
+        rcases a_kv_b with (a_knows_after_t | a_knows_after_f)
+        · have := true_of_knowldege a_knows_after_t
+          simp at this
+          unfold resultSet
+          cases C <;> simp [ra] <;> simp at ra <;> subst ra
+          -- TODO NEXT
+          all_goals
+            sorry
+        · sorry
     case Callee =>
       -- analogous?
       sorry
@@ -865,19 +883,59 @@ lemma corollary_twelve {a b : @Agent n} :
       ⊨ ( (K a ( b @ b)) ⟹ (( b @ b) ⋀ ( b @ a) ⋀ (¬' (‾b @ a))) )
     ∧ ⊨ ( (K a (‾b @ b)) ⟹ ((‾b @ b) ⋀ (‾b @ a) ⋀ (¬' ( b @ a))) )
     := by
-  constructor
-  · simp [valid, eval]
-    intro S σ lhs
-    sorry
-  · sorry
+  constructor <;> (intro S σ ; rw [eval_impl]; intro a_knows)
+  all_goals
+    simp only [eval, stubbornness]
+    have s_b_true:= true_of_knowldege a_knows
+    simp at s_b_true
+    refine ⟨s_b_true, ?_⟩
+    have := @knowledge_implies_correct_belief n S σ a b ?_
+    · simp_all
+    · rw [eval_dis]
+      tauto
 
+/-- Corollary 13 -/
 lemma corollary_thirteen {a b : @Agent n} :
       ⊨ ( (K a ( b @ b)) ⇔ K a (( b @ b) ⋀ ( b @ a) ⋀ (¬' (‾b @ a))) )
     ∧ ⊨ ( (K a (‾b @ b)) ⇔ K a ((‾b @ b) ⋀ (‾b @ a) ⋀ (¬' ( b @ a))) )
     := by
-  constructor
-  · sorry
-  · sorry
+  constructor <;> (intro S σ ; rw [eval_biimpl] ; constructor)
+  · intro a_knows
+    unfold eval
+    intro T τ equ
+    simp only [eval, stubbornness]
+    have := @knowledge_implies_correct_belief n S σ a b ?_
+    · have s_b_true:= true_of_knowldege a_knows
+      simp only [stubbornness] at s_b_true
+      unfold eval at a_knows
+      have := a_knows T τ equ
+      have := indistinguishable_then_same_values ⟨by grind, equ⟩ -- using Lemma 7 here
+      simp_all
+    · rw [eval_dis]; tauto
+  · intro a_knows_rhs
+    unfold eval at a_knows_rhs
+    unfold eval
+    intro T τ equ
+    specialize a_knows_rhs T τ equ
+    simp_all [eval]
+  · intro a_knows
+    unfold eval
+    intro T τ equ
+    simp only [eval, stubbornness]
+    have := @knowledge_implies_correct_belief n S σ a b ?_
+    · have s_b_true:= true_of_knowldege a_knows
+      simp only [stubbornness] at s_b_true
+      unfold eval at a_knows
+      have := a_knows T τ equ
+      have := indistinguishable_then_same_values ⟨by grind, equ⟩ -- using Lemma 7 here
+      simp_all
+    · rw [eval_dis]; tauto
+  · intro a_knows_rhs
+    unfold eval at a_knows_rhs
+    unfold eval
+    intro T τ equ
+    specialize a_knows_rhs T τ equ
+    simp_all [eval]
 
 /-!
 
