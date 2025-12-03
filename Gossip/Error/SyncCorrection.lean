@@ -813,6 +813,7 @@ lemma knowledge_implies_correct_belief {n} {S : @Dist n} {σ : @OSequence n} {a 
               have := true_of_knowldege h
               simp_all
       · -- "Or ..."
+        clear IH -- here we do not use it
         rw [eval_dis] at h
         push_neg at h
         rcases h with ⟨a_not_know_before_t, a_not_know_before_f⟩
@@ -823,7 +824,24 @@ lemma knowledge_implies_correct_belief {n} {S : @Dist n} {σ : @OSequence n} {a 
           simp at this
           unfold resultSet
           cases C <;> simp [ra] <;> simp at ra <;> subst ra
-          -- TODO NEXT
+          case neg.inl.normal c =>
+            refine ⟨⟨⟨?_, ?_⟩, ?_⟩, ?_⟩
+            · -- ???
+              -- Why must `a` already have one of the values b or not-b after σ?
+              sorry
+            · cases S b <;>  simp_all
+            · use S, ⟨σ,⁻o⟩
+              simp
+              expose_names -- pfoei
+              use ⌜a c⌝
+              simp
+            · intro not_in_callee not_a_knows T τ same_len equ C role_C same_contrib
+              cases h_b : S b
+              all_goals
+                simp_all
+              -- ???
+              -- How do we know that `S b = T b` here?
+              sorry
           all_goals
             sorry
         · sorry
@@ -879,6 +897,7 @@ lemma example_correct_belief_does_not_imply_knowledege (a b : Agent) (h : a ≠ 
         use ⟨[⌜a b⌝], by simp [maxOne]⟩
         simp_all [equiv, roleOfIn, contribSet, Call.pair, ini]
 
+/-- Corollary 12 -/
 lemma corollary_twelve {a b : @Agent n} :
       ⊨ ( (K a ( b @ b)) ⟹ (( b @ b) ⋀ ( b @ a) ⋀ (¬' (‾b @ a))) )
     ∧ ⊨ ( (K a (‾b @ b)) ⟹ ((‾b @ b) ⋀ (‾b @ a) ⋀ (¬' ( b @ a))) )
