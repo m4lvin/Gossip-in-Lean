@@ -187,6 +187,10 @@ lemma OSequence.length_nil : OSequence.length (⟨[], h⟩ : @OSequence n) = 0 :
 lemma OSequence.length_def (σ : @Sequence n) h :
   OSequence.length ⟨σ, h⟩ = σ.length := by unfold OSequence.length; simp
 
+@[simp]
+lemma OSequence.maxOne {σ : @OSequence n} : maxOne σ.1 := by
+  cases σ; simp_all
+
 /-! ## Semantics -/
 
 mutual
@@ -417,7 +421,110 @@ lemma equiv_trans {a m S} {σ : @OSequence n} {h1 : σ.length = m} {T τ h2 R ρ
 theorem equiv_Equivalence : Equivalence (@equiv n k i) :=
   ⟨fun _ => equiv_refl, equiv_symm.mp, equiv_trans⟩
 
+lemma equiv_then_know_same {a m S} {σ : @OSequence n} {h1 : σ.length = m} {T τ h2}
+    (equ : equiv a (S, ⟨σ, h1⟩) (T, ⟨τ, h2⟩))
+    φ
+    : eval S σ (K a φ) ↔ eval T τ (K a φ) := by
+  rcases σ with ⟨σ,o⟩
+  unfold eval
+  simp
+  constructor
+  · intro hyp η ρ same_len equ'
+    apply hyp η ρ (by simp at h1; aesop)
+    have := @equiv_trans n a m S ⟨σ,o⟩ h1 T τ h2 η ρ (by grind) equ (by convert equ'; grind)
+    convert this
+  · intro hyp η ρ same_len equ'
+    apply hyp η ρ (by aesop)
+    rw [equiv_symm] at equ
+    have := @equiv_trans n a m T τ h2 S ⟨σ,o⟩ h1 η ρ (by grind) equ (by convert equ'; grind)
+    convert this
+
 /-! ## Properties of the Semantics -/
+
+set_option maxHeartbeats 2000000 in
+/-- Lemma 7 -/
+lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ τ : OSequence} :
+    (S, σ) ~_a (T, τ)  →  S⌈σ⌉a = T⌈τ⌉a := by
+  rcases σ with ⟨σ,o⟩
+  rcases τ with ⟨τ,o'⟩
+  intro ⟨same_len, equ⟩
+  induction σ generalizing τ o'
+  case nil =>
+    have := List.length_eq_zero_iff.mp same_len.symm
+    aesop
+  case cons C σ IH =>
+    simp at IH
+    rcases List.exists_cons_of_length_eq_add_one same_len.symm with ⟨D, τ, _def⟩
+    subst _def
+    simp only [equiv] at equ
+    specialize IH (⁻o) _ (⁻o') (by simp at same_len; assumption) equ.1 -- IH is now `S⌈σ⌉a = T⌈τ⌉a`
+    -- distinguish cases whether/how a is involved in C (and thus also D) or not
+    cases r : roleOfIn a C
+    case Caller => -- first out of three outer cases
+      simp only [r] at equ
+      rcases equ with ⟨prev_equ, Caller_eq, prev_same_contrib, same_pair⟩
+      unfold contribSet at prev_same_contrib
+      let C_copy := C
+      cases C <;> cases D <;> simp [Call.pair, roleOfIn_eq_Caller_iff] at *
+      all_goals -- 9 subcases
+        rcases same_pair with ⟨_,_⟩
+        subst_eqs
+        simp only [OSequence.length_def, List.length_cons, Nat.add_right_cancel_iff] at same_len
+        clear Caller_eq
+        simp only [roleOfIn_a, resultSet, Subtype.forall, OSequence.length_def,
+          roleOfIn_sndE_eq_Caller_iff, roleOfIn_fstE_eq_Caller_iff, roleOfIn_sndE_eq_Caller_iff]
+        ext ⟨d,k⟩
+        constructor
+        all_goals
+          intro dk_in
+          simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
+          rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
+        · simp_all [← IH, ← equiv_then_know_same prev_equ]
+          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
+          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
+          · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
+          · rw [← role2]; try simp [roleOfIn]
+        · simp_all [equiv_then_know_same prev_equ]
+          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
+          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
+          · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
+          · rw [← role2]; try simp [roleOfIn]
+    case Callee => -- second of three outer cases, very similar to `Caller`
+      simp only [r] at equ
+      rcases equ with ⟨prev_equ, Callee_eq, prev_same_contrib, same_pair⟩
+      unfold contribSet at prev_same_contrib
+      let C_copy := C
+      cases C <;> cases D <;> simp [Call.pair, roleOfIn_eq_Callee_iff] at *
+      all_goals -- again 9 subcases, same proof
+        rcases same_pair with ⟨_,_⟩
+        rcases r with ⟨_,_⟩
+        subst_eqs
+        simp only [OSequence.length_def, List.length_cons, Nat.add_right_cancel_iff] at same_len
+        clear Callee_eq
+        simp_all [resultSet]
+        ext ⟨d,k⟩
+        constructor
+        all_goals
+          intro dk_in
+          simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
+          rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
+        · simp_all [← IH, ← equiv_then_know_same prev_equ]
+          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
+          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
+          · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
+          · rw [← role2]; try simp [roleOfIn]
+        · simp_all [equiv_then_know_same prev_equ]
+          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
+          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
+          · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
+          · rw [← role2]; try simp [roleOfIn]
+    case Other => -- third out of three outer cases, easy
+      unfold resultSet
+      rw [r]
+      rw [equ.2.1] at r
+      rw [r]
+      simp only
+      exact IH
 
 /-- Knowledge is truthful. This follows from `equiv_refl`. -/
 lemma true_of_knowldege {S σ a} {φ : @Form n} :
@@ -426,7 +533,7 @@ lemma true_of_knowldege {S σ a} {φ : @Form n} :
   simp [eval] at hyp
   exact hyp S σ rfl equiv_refl
 
-/-- Agents know their own initial state. -/
+/-- Agents know their own initial state. This is *not* the same as Lemma 7. -/
 lemma know_self m σ τ (h1 : σ.length = m) (h2 : τ.1.length = m) :
     equiv a (S, ⟨σ, h1⟩) (T, ⟨τ, h2⟩) → S a = T a  := by
   rcases σ with ⟨σ,o⟩
@@ -535,109 +642,6 @@ lemma not_notMem_resultSet : (b, ! S b) ∉ S⌈σ⌉b := by
   have := @stubbornness _ S b (! S b) _ σ rfl
   unfold eval at this
   simp [this]
-
-lemma equiv_then_know_same {a m S} {σ : @OSequence n} {h1 : σ.length = m} {T τ h2}
-    (equ : equiv a (S, ⟨σ, h1⟩) (T, ⟨τ, h2⟩))
-    φ
-    : eval S σ (K a φ) ↔ eval T τ (K a φ) := by
-  rcases σ with ⟨σ,o⟩
-  unfold eval
-  simp
-  constructor
-  · intro hyp η ρ same_len equ'
-    apply hyp η ρ (by simp at h1; aesop)
-    have := @equiv_trans n a m S ⟨σ,o⟩ h1 T τ h2 η ρ (by grind) equ (by convert equ'; grind)
-    convert this
-  · intro hyp η ρ same_len equ'
-    apply hyp η ρ (by aesop)
-    rw [equiv_symm] at equ
-    have := @equiv_trans n a m T τ h2 S ⟨σ,o⟩ h1 η ρ (by grind) equ (by convert equ'; grind)
-    convert this
-
-set_option maxHeartbeats 2000000 in
-/-- Lemma 7 -/
-lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ τ : OSequence} :
-    (S, σ) ~_a (T, τ)  →  S⌈σ⌉a = T⌈τ⌉a := by
-  rcases σ with ⟨σ,o⟩
-  rcases τ with ⟨τ,o'⟩
-  intro ⟨same_len, equ⟩
-  induction σ generalizing τ o'
-  case nil =>
-    have := List.length_eq_zero_iff.mp same_len.symm
-    aesop
-  case cons C σ IH =>
-    simp at IH
-    rcases List.exists_cons_of_length_eq_add_one same_len.symm with ⟨D, τ, _def⟩
-    subst _def
-    simp only [equiv] at equ
-    specialize IH (⁻o) _ (⁻o') (by simp at same_len; assumption) equ.1 -- IH is now `S⌈σ⌉a = T⌈τ⌉a`
-    -- distinguish cases whether/how a is involved in C (and thus also D) or not
-    cases r : roleOfIn a C
-    case Caller => -- first out of three outer cases
-      simp only [r] at equ
-      rcases equ with ⟨prev_equ, Caller_eq, prev_same_contrib, same_pair⟩
-      unfold contribSet at prev_same_contrib
-      let C_copy := C
-      cases C <;> cases D <;> simp [Call.pair, roleOfIn_eq_Caller_iff] at *
-      all_goals -- 9 subcases
-        rcases same_pair with ⟨_,_⟩
-        subst_eqs
-        simp only [OSequence.length_def, List.length_cons, Nat.add_right_cancel_iff] at same_len
-        clear Caller_eq
-        simp only [roleOfIn_a, resultSet, Subtype.forall, OSequence.length_def,
-          roleOfIn_sndE_eq_Caller_iff, roleOfIn_fstE_eq_Caller_iff, roleOfIn_sndE_eq_Caller_iff]
-        ext ⟨d,k⟩
-        constructor
-        all_goals
-          intro dk_in
-          simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
-          rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
-        · simp_all [← IH, ← equiv_then_know_same prev_equ]
-          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
-          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
-          · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
-          · rw [← role2]; try simp [roleOfIn]
-        · simp_all [equiv_then_know_same prev_equ]
-          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
-          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
-          · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
-          · rw [← role2]; try simp [roleOfIn]
-    case Callee => -- second of three outer cases, very similar to `Caller`
-      simp [r] at equ
-      rcases equ with ⟨prev_equ, Callee_eq, prev_same_contrib, same_pair⟩
-      unfold contribSet at prev_same_contrib
-      let C_copy := C
-      cases C <;> cases D <;> simp [Call.pair, roleOfIn_eq_Callee_iff] at *
-      all_goals -- again 9 subcases, same proof
-        rcases same_pair with ⟨_,_⟩
-        rcases r with ⟨_,_⟩
-        subst_eqs
-        simp only [OSequence.length_def, List.length_cons, Nat.add_right_cancel_iff] at same_len
-        clear Callee_eq
-        simp_all [resultSet]
-        ext ⟨d,k⟩
-        constructor
-        all_goals
-          intro dk_in
-          simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
-          rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
-        · simp_all [← IH, ← equiv_then_know_same prev_equ]
-          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
-          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
-          · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
-          · rw [← role2]; try simp [roleOfIn]
-        · simp_all [equiv_then_know_same prev_equ]
-          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
-          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
-          · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
-          · rw [← role2]; try simp [roleOfIn]
-    case Other => -- third out of three outer cases, easy
-      unfold resultSet
-      rw [r]
-      rw [equ.2.1] at r
-      rw [r]
-      simp only
-      exact IH
 
 /-- Lemma 8. The truth value of any $b_a$ atom is known by agent $a$.
 Note that `k` here says whether we have $b$ or $\overline{b}$. -/
