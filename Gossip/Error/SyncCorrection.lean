@@ -466,6 +466,7 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
       unfold contribSet at prev_same_contrib
       let C_copy := C
       cases C <;> cases D <;> simp [Call.pair, roleOfIn_eq_Caller_iff] at *
+      -- TODO: after Lean / batteries update speed up below with merged `simp_all?` suggestions
       all_goals -- 9 subcases
         rcases same_pair with ⟨_,_⟩
         subst_eqs
@@ -552,7 +553,19 @@ lemma know_self m σ τ (h1 : σ.length = m) (h2 : τ.1.length = m) :
       simp at h1 h2
       aesop
 
-/-- Agents are stubborn about their own secrets. -/
+/-- Lemma 8. The truth value of any $b_a$ atom is known by agent $a$.
+Note that `k` here says whether we have $b$ or $\overline{b}$. -/
+lemma local_is_known {a b : @Agent n} (k : Bool) :
+      ⊨ ((     ⟨b,k⟩ @ a ) ⟹ (K a (     ⟨b,k⟩ @ a) ))
+    ∧ ⊨ ((Neg (⟨b,k⟩ @ a)) ⟹ (K a (Neg (⟨b,k⟩ @ a)))) := by
+  constructor
+  all_goals
+  · simp only [valid, eval, not_not, Subtype.forall, not_forall, not_and, not_exists]
+    intro S σ bk_in T τ same_len equ
+    have := indistinguishable_then_same_values ⟨?_, equ⟩ -- using Lemma 7
+    <;> grind only
+
+/-- Corollary 12. Agents are stubborn about their own secrets. -/
 @[simp]
 lemma stubbornness m σ (h : σ.length = m) :
     S⌈σ⌉ ⊧ (a, k) @ a  ↔  S a = k := by
@@ -643,21 +656,8 @@ lemma not_notMem_resultSet : (b, ! S b) ∉ S⌈σ⌉b := by
   unfold eval at this
   simp [this]
 
-/-- Lemma 8. The truth value of any $b_a$ atom is known by agent $a$.
-Note that `k` here says whether we have $b$ or $\overline{b}$. -/
-lemma local_is_known {a b : @Agent n} (k : Bool) :
-      ⊨ ((     ⟨b,k⟩ @ a ) ⟹ (K a (     ⟨b,k⟩ @ a) ))
-    ∧ ⊨ ((Neg (⟨b,k⟩ @ a)) ⟹ (K a (Neg (⟨b,k⟩ @ a)))) := by
-  constructor
-  all_goals
-  · simp only [valid, eval, not_not, Subtype.forall, not_forall, not_and, not_exists]
-    intro S σ bk_in T τ same_len equ
-    have := indistinguishable_then_same_values ⟨?_, equ⟩ -- using Lemma 7
-    <;> grind only
-
-/-! NOTE: the remaining lemmas do *not* use Lemma 7 and 8. -/
-
-/-- Helper for Lemma 9, stronger version using a specific `k` and not `Kv`. -/
+/-- Lemma 9. Parts (i) and (ii) are given by the two `k` values.
+The proof here uses `stubbornness`. -/
 lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
     (hKv : S⌈σ⌉ ⊧ K a ((b,k) @ b))
     (hSub : σ ⊑ τ)
@@ -689,7 +689,7 @@ lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
     rw [stubbornness _ _ rfl] at this
     assumption
 
-/-- Lemma 9. Knowledge of secrets is preserved. -/
+/-- Corollary 10. Knowledge of secrets is preserved. -/
 lemma knowledge_of_secrets_is_preserved {a b : @Agent n}
     (hKv : S⌈σ⌉ ⊧ Kv a b) (hSub : σ ⊑ τ) : S⌈τ⌉ ⊧ Kv a b := by
   unfold eval eval eval at hKv
@@ -702,7 +702,7 @@ lemma knowledge_of_secrets_is_preserved {a b : @Agent n}
   · right
     exact @knowledge_of_secrets_is_preserved' n S σ τ a b false h hSub
 
-/-- Lemma 10. Agents know their own value. Follows from `stubbornness`. -/
+/-- Agents know their own value. Follows from `stubbornness`. -/
 lemma know_your_own {a : @Agent n} :
     ⊨ Kv a a := by
   intro S σ
@@ -722,19 +722,14 @@ lemma know_your_own {a : @Agent n} :
     rw [know_self _ _ _ _ _ equ] at h
     exact h
 
-/-- Helper for Lemma 11 "iff (call semantics)" -/
+/-- Helper for Prop 13 "iff (call semantics)" -/
 lemma not_in_call_then_invariant_resultSet {a : @Agent n} {C : @Call n}
     (h : roleOfIn a C = Other) S σ o
     : S⌈⟨C :: σ, o⟩⌉a = S⌈⟨σ, ⁻o⟩⌉a := by
   conv => left; unfold resultSet
   simp [h]
 
--- FIXME move up
-@[simp]
-lemma OSequence.maxOne {σ : @OSequence n} : maxOne σ.1 := by
-  cases σ; simp_all
-
-/-- Helper for Lemma 11 "iff (semantics of formulas and observation relation)" -/
+/-- Helper for Prop 13 "iff (semantics of formulas and observation relation)" -/
 lemma not_in_call_then_invariant_kv {a : @Agent n} {C : @Call n}
     (h : roleOfIn a C = Other) b S σ o
     : eval S ⟨C :: σ,  o⟩ (Kv a b)
@@ -770,93 +765,102 @@ lemma not_in_call_then_invariant_kv {a : @Agent n} {C : @Call n}
     apply knowledge_of_secrets_is_preserved hyp
     simp
 
-/-- Lemma 11 -/
-lemma knowledge_implies_correct_belief {n} {S : @Dist n} {σ : @OSequence n} {a b : @Agent n} :
-    S⌈σ⌉ ⊧ (Kv a b) → ((b, S b) ∈ S⌈σ⌉a ∧ (b, ! S b) ∉ S⌈σ⌉a) := by
-  intro a_kv_b
+/-- Stronger value-specific helper for Prop 13 "iff (semantics of formulas and observation relation)" -/
+lemma not_in_call_then_invariant {a : @Agent n} {C : @Call n}
+    (h : roleOfIn a C = Other) b S σ o
+    : eval S ⟨C :: σ,  o⟩ (K a (⟨b, k⟩ @ b))
+    ↔ eval S ⟨     σ, ⁻o⟩ (K a (⟨b, k⟩ @ b)) := by
+  constructor
+  · intro know_after
+    unfold eval eval at *
+    -- unsure from here
+    simp only [Subtype.forall, OSequence.length_def, List.length_cons] at *
+    intro T τ same_len equ
+    let CnoErr : Call := match C with -- we remove the error from `C` if needed.
+      | ⌜d e⌝ => ⌜d e⌝
+      | ⌜d^c e⌝ => ⌜d e⌝
+      | ⌜d e^c⌝ => ⌜d e⌝
+    have h' : roleOfIn a CnoErr = Other := by unfold CnoErr; cases C <;> simp_all
+    sorry
+    /-
+    apply know_after T ⟨CnoErr :: τ, ?_⟩ (by simp [OSequence.length]; exact same_len)
+    · unfold equiv; simp [h, h', equ]
+    · unfold CnoErr; cases C <;> simp [maxOne]
+    -/
+  · intro hyp
+    apply @knowledge_of_secrets_is_preserved' n S ⟨σ,⁻o⟩ ⟨_,o⟩ a b k hyp
+    simp
+
+/- Note: In Prop 13 and Cor 14 again the parts (i) and (ii) are given by different `k` values.-/
+
+/-- Proposition 13. -/
+lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
+  ⊨ (K a ((b,k) @ b)) ⟹ ( ((b,k) @ b) ⋀ ((b,k) @ a) ⋀ ( ¬' (b, !k) @ a) ) := by
+  intro S σ
+  rw [eval_impl]
+  intro knows
   rcases σ with ⟨σ,o⟩
-  induction σ
+  induction σ -- TODO: induction on length, not on specific sequence? use `cases`?
   case nil =>
-    unfold eval eval eval at a_kv_b
-    simp only [not_and_or, not_not] at a_kv_b
-    rcases a_kv_b with h|h
-    all_goals
+    simp [eval]
+    have := true_of_knowldege knows
+    by_cases b = a
+    · simp_all [eval]
+    · exfalso
       simp_all [eval]
-      by_cases b = a
-      · aesop
-      · exfalso
-        have := h S ⟨[], by simp [maxOne]⟩ (by simp)
-        have := h (S.switch b) ⟨[], by simp [maxOne]⟩ (by simp) (by simp [Dist.switch]; grind)
-        simp_all [Dist.switch]
+      have := knows S ⟨[], by simp [maxOne]⟩ (by simp)
+      have := knows (S.switch b) ⟨[], by simp [maxOne]⟩ (by simp) (by simp [Dist.switch]; grind)
+      simp_all [Dist.switch]
   case cons C σ IH =>
     cases ra : roleOfIn a C -- "For σ = τ.acᴷ ..."
     case Caller =>
-      -- "... we distinguish two cases."
-      by_cases h : eval S ⟨σ,⁻o⟩ (Kv a b)
-      · -- "Either already ...""
+      -- "... we distinguish two subcases."
+      by_cases h : eval S ⟨σ,⁻o⟩ (K a ((b,k) @ b))
+      · -- "Either already ..."
         specialize IH (⁻o) h
-        unfold resultSet
-        simp only [ra, stubbornness, Subtype.forall, OSequence.length_def]
         let C_copy := C
         cases C <;> simp_all <;> subst ra
         all_goals
-          refine ⟨⟨?_, ?_⟩, ?_⟩
-          · simp [eval, stubbornness, Subtype.forall, OSequence.length_def, not_forall,
-              Bool.not_eq_not]
-            use S
-            simp only [and_true]
-            use ⟨σ,⁻o⟩
-            simp
-          · use S, ⟨σ,⁻o⟩; simp; use C_copy; unfold C_copy; simp [roleOfIn]
-          · rw [eval_dis] at h
-            intro not_in_callee not_a_knows T τ same_len equ
-            cases h_b : S b
-            all_goals
-              exfalso
-              simp_all only [Bool.not_false, Bool.not_true, or_false, false_or]
-              have := true_of_knowldege h
-              simp_all
-      · -- "Or ..."
-        clear IH -- here we do not use it
-        rw [eval_dis] at h
-        push_neg at h
-        rcases h with ⟨a_not_know_before_t, a_not_know_before_f⟩
-        rw [eval_dis] at a_kv_b
-        -- "The assumption ... then implies that agent a obtained knowledge ... in the call" `C`
-        rcases a_kv_b with (a_knows_after_t | a_knows_after_f)
-        · have := true_of_knowldege a_knows_after_t
-          simp at this
-          unfold resultSet
-          cases C <;> simp [ra] <;> simp at ra <;> subst ra
-          case neg.inl.normal c =>
-            refine ⟨⟨⟨?_, ?_⟩, ?_⟩, ?_⟩
-            · -- ???
-              -- Why must `a` already have one of the values b or not-b after σ?
-              sorry
-            · cases S b <;>  simp_all
-            · use S, ⟨σ,⁻o⟩
-              simp
-              expose_names -- pfoei
-              use ⌜a c⌝
-              simp
-            · intro not_in_callee not_a_knows T τ same_len equ C role_C same_contrib
-              cases h_b : S b
-              all_goals
-                simp_all
-              -- ???
-              -- How do we know that `S b = T b` here?
-              sorry
-          all_goals
+          simp [eval]
+          refine ⟨?_, ?_, ?_⟩
+          · simp_all [eval]
+          · -- use Lemma 9 here? how?
+            have fromLemma9 := @knowledge_of_secrets_is_preserved' _ S ⟨σ,⁻o⟩ ⟨C_copy :: σ, o⟩ a b k sorry (by simp)
+            have := true_of_knowldege fromLemma9
+            unfold C_copy at this
+            simp at this
             sorry
-        · sorry
+          · -- same?
+            sorry
+      · -- "Or ..."
+        clear IH -- here we do not use it?
+        sorry
     case Callee =>
       -- analogous?
       sorry
     case Other => -- "where b,c ≠ a"
-      rw [not_in_call_then_invariant_kv ra b S σ o] at a_kv_b
-      specialize IH (⁻o) a_kv_b -- induction
-      rw [not_in_call_then_invariant_resultSet ra S σ o]
-      assumption
+      have := @not_in_call_then_invariant _ k _ _ ra b S σ o
+      specialize IH (⁻o) (this.mp knows) -- induction
+      simp_all [eval, not_in_call_then_invariant_resultSet ra S σ o]
+
+/-- Corollary 14. -/
+lemma knowledge_is_justified_true_belief {n} {S : @Dist n} {σ : @OSequence n} {a b : @Agent n} :
+    ⊨ K a ((b,k) @ b) ⇔ K a ( ((b,k) @ b) ⋀ ((b,k) @ a) ⋀ ( ¬' (b, !k) @ a) ) := by
+  intro S σ
+  rw [eval_biimpl]
+  constructor
+  · -- left to right: "apart from Proposition 13, use Lemma 8."
+    intro lhs
+    rw [eval]
+    intro T τ samel_ln
+    have fromProp13 := @knowledge_implies_correct_belief _ a b k T τ
+    rw [eval_impl] at fromProp13
+    apply fromProp13
+    exact (equiv_then_know_same samel_ln ((b, k)@b)).mp lhs -- using, not Lemma 8 here!
+  · -- "right to left is obvious"
+    grind [eval]
+
+/-! ## Examples -/
 
 /-- Initial distribution with all values set to true. -/
 def ini (n : Nat) : @Dist n := fun _ => true
@@ -900,72 +904,5 @@ lemma example_correct_belief_does_not_imply_knowledege (a b : Agent) (h : a ≠ 
         simp only [ini, and_true]
         use ⟨[⌜a b⌝], by simp [maxOne]⟩
         simp_all [equiv, roleOfIn, contribSet, Call.pair, ini]
-
-/-- Corollary 12 -/
-lemma corollary_twelve {a b : @Agent n} :
-      ⊨ ( (K a ( b @ b)) ⟹ (( b @ b) ⋀ ( b @ a) ⋀ (¬' (‾b @ a))) )
-    ∧ ⊨ ( (K a (‾b @ b)) ⟹ ((‾b @ b) ⋀ (‾b @ a) ⋀ (¬' ( b @ a))) )
-    := by
-  constructor <;> (intro S σ ; rw [eval_impl]; intro a_knows)
-  all_goals
-    simp only [eval, stubbornness]
-    have s_b_true:= true_of_knowldege a_knows
-    simp at s_b_true
-    refine ⟨s_b_true, ?_⟩
-    have := @knowledge_implies_correct_belief n S σ a b ?_
-    · simp_all
-    · rw [eval_dis]
-      tauto
-
-/-- Corollary 13 -/
-lemma corollary_thirteen {a b : @Agent n} :
-      ⊨ ( (K a ( b @ b)) ⇔ K a (( b @ b) ⋀ ( b @ a) ⋀ (¬' (‾b @ a))) )
-    ∧ ⊨ ( (K a (‾b @ b)) ⇔ K a ((‾b @ b) ⋀ (‾b @ a) ⋀ (¬' ( b @ a))) )
-    := by
-  constructor <;> (intro S σ ; rw [eval_biimpl] ; constructor)
-  · intro a_knows
-    unfold eval
-    intro T τ equ
-    simp only [eval, stubbornness]
-    have := @knowledge_implies_correct_belief n S σ a b ?_
-    · have s_b_true:= true_of_knowldege a_knows
-      simp only [stubbornness] at s_b_true
-      unfold eval at a_knows
-      have := a_knows T τ equ
-      have := indistinguishable_then_same_values ⟨by grind, equ⟩ -- using Lemma 7 here
-      simp_all
-    · rw [eval_dis]; tauto
-  · intro a_knows_rhs
-    unfold eval at a_knows_rhs
-    unfold eval
-    intro T τ equ
-    specialize a_knows_rhs T τ equ
-    simp_all [eval]
-  · intro a_knows
-    unfold eval
-    intro T τ equ
-    simp only [eval, stubbornness]
-    have := @knowledge_implies_correct_belief n S σ a b ?_
-    · have s_b_true:= true_of_knowldege a_knows
-      simp only [stubbornness] at s_b_true
-      unfold eval at a_knows
-      have := a_knows T τ equ
-      have := indistinguishable_then_same_values ⟨by grind, equ⟩ -- using Lemma 7 here
-      simp_all
-    · rw [eval_dis]; tauto
-  · intro a_knows_rhs
-    unfold eval at a_knows_rhs
-    unfold eval
-    intro T τ equ
-    specialize a_knows_rhs T τ equ
-    simp_all [eval]
-
-/-!
-
-Examples?
-
-/-- Proposition 17, 18 and 19 maybe too hard? -/
-
--/
 
 end Error
