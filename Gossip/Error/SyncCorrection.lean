@@ -844,7 +844,7 @@ lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
       simp_all [eval, not_in_call_then_invariant_resultSet ra S σ o]
 
 /-- Corollary 14. -/
-lemma knowledge_is_justified_true_belief {n} {S : @Dist n} {σ : @OSequence n} {a b : @Agent n} :
+lemma knowledge_is_justified_true_belief {n} {a b : @Agent n} :
     ⊨ K a ((b,k) @ b) ⇔ K a ( ((b,k) @ b) ⋀ ((b,k) @ a) ⋀ ( ¬' (b, !k) @ a) ) := by
   intro S σ
   rw [eval_biimpl]
