@@ -453,7 +453,7 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
     have := List.length_eq_zero_iff.mp same_len.symm
     aesop
   case cons C σ IH =>
-    simp at IH
+    simp only [OSequence.length_def] at IH
     rcases List.exists_cons_of_length_eq_add_one same_len.symm with ⟨D, τ, _def⟩
     subst _def
     simp only [equiv] at equ
@@ -480,12 +480,12 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
           intro dk_in
           simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
           rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
-        · simp_all [← IH, ← equiv_then_know_same prev_equ]
+        · simp_all? [← IH, ← equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
           refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
           · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
           · rw [← role2]; try simp [roleOfIn]
-        · simp_all [equiv_then_know_same prev_equ]
+        · simp_all? [equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
           refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
           · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
@@ -502,19 +502,19 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
         subst_eqs
         simp only [OSequence.length_def, List.length_cons, Nat.add_right_cancel_iff] at same_len
         clear Callee_eq
-        simp_all [resultSet]
+        simp_all? [resultSet]
         ext ⟨d,k⟩
         constructor
         all_goals
           intro dk_in
           simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
           rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
-        · simp_all [← IH, ← equiv_then_know_same prev_equ]
+        · simp_all? [← IH, ← equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
           refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
           · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
           · rw [← role2]; try simp [roleOfIn]
-        · simp_all [equiv_then_know_same prev_equ]
+        · simp_all? [equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
           refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
           · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
