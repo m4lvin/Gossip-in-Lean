@@ -565,7 +565,7 @@ lemma local_is_known {a b : @Agent n} (k : Bool) :
     have := indistinguishable_then_same_values ⟨?_, equ⟩ -- using Lemma 7
     <;> grind only
 
-/-- Corollary 12. Agents are stubborn about their own secrets. -/
+/-- Lemma 9. Agents are stubborn about their own secrets. -/
 @[simp]
 lemma stubbornness m σ (h : σ.length = m) :
     S⌈σ⌉ ⊧ (a, k) @ a  ↔  S a = k := by
@@ -656,9 +656,9 @@ lemma not_notMem_resultSet : (b, ! S b) ∉ S⌈σ⌉b := by
   unfold eval at this
   simp [this]
 
-/-- Lemma 9. Parts (i) and (ii) are given by the two `k` values.
-The proof here uses `stubbornness`. -/
-lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
+/-- Lemma 10. Parts (i) and (ii) are given by the two `k` values.
+The proof uses `stubbornness`. -/
+lemma knowledge_of_secrets_is_preserved {a b : Agent} (k : Bool)
     (hKv : S⌈σ⌉ ⊧ K a ((b,k) @ b))
     (hSub : σ ⊑ τ)
     : S⌈τ⌉ ⊧ K a ((b,k) @ b) := by
@@ -689,8 +689,8 @@ lemma knowledge_of_secrets_is_preserved' {a b : Agent} (k : Bool)
     rw [stubbornness _ _ rfl] at this
     assumption
 
-/-- Corollary 10. Knowledge of secrets is preserved. -/
-lemma knowledge_of_secrets_is_preserved {a b : @Agent n}
+/-- Corollary 11. `Kv` of secrets is preserved. -/
+lemma kv_of_secrets_is_preserved {a b : @Agent n}
     (hKv : S⌈σ⌉ ⊧ Kv a b) (hSub : σ ⊑ τ) : S⌈τ⌉ ⊧ Kv a b := by
   unfold eval eval eval at hKv
   rw [← or_iff_not_and_not] at hKv
@@ -698,9 +698,9 @@ lemma knowledge_of_secrets_is_preserved {a b : @Agent n}
   rw [← or_iff_not_and_not]
   rcases hKv with (h|h)
   · left
-    exact @knowledge_of_secrets_is_preserved' n S σ τ a b true h hSub
+    exact @knowledge_of_secrets_is_preserved n S σ τ a b true h hSub
   · right
-    exact @knowledge_of_secrets_is_preserved' n S σ τ a b false h hSub
+    exact @knowledge_of_secrets_is_preserved n S σ τ a b false h hSub
 
 /-- Agents know their own value. Follows from `stubbornness`. -/
 lemma know_your_own {a : @Agent n} :
@@ -722,14 +722,16 @@ lemma know_your_own {a : @Agent n} :
     rw [know_self _ _ _ _ _ equ] at h
     exact h
 
-/-- Helper for Prop 13 "iff (call semantics)" -/
+/-- OLD?
+Helper for Prop 13 "iff (call semantics)" -/
 lemma not_in_call_then_invariant_resultSet {a : @Agent n} {C : @Call n}
     (h : roleOfIn a C = Other) S σ o
     : S⌈⟨C :: σ, o⟩⌉a = S⌈⟨σ, ⁻o⟩⌉a := by
   conv => left; unfold resultSet
   simp [h]
 
-/-- Helper for Prop 13 "iff (semantics of formulas and observation relation)" -/
+/-- OLD
+Helper for Prop 12 "iff (semantics of formulas and observation relation)" -/
 lemma not_in_call_then_invariant_kv {a : @Agent n} {C : @Call n}
     (h : roleOfIn a C = Other) b S σ o
     : eval S ⟨C :: σ,  o⟩ (Kv a b)
@@ -762,10 +764,11 @@ lemma not_in_call_then_invariant_kv {a : @Agent n} {C : @Call n}
       · unfold equiv; simp [h, h', equ]
       · unfold CnoErr; cases C <;> simp [maxOne]
   · intro hyp
-    apply knowledge_of_secrets_is_preserved hyp
+    apply kv_of_secrets_is_preserved hyp
     simp
 
-/-- Stronger value-specific helper for Prop 13 "iff (semantics of formulas and observation relation)" -/
+/-- OLD
+Stronger value-specific helper for Prop 12 "iff (semantics of formulas and observation relation)" -/
 lemma not_in_call_then_invariant {a : @Agent n} {C : @Call n}
     (h : roleOfIn a C = Other) b S σ o
     : eval S ⟨C :: σ,  o⟩ (K a (⟨b, k⟩ @ b))
@@ -788,12 +791,12 @@ lemma not_in_call_then_invariant {a : @Agent n} {C : @Call n}
     · unfold CnoErr; cases C <;> simp [maxOne]
     -/
   · intro hyp
-    apply @knowledge_of_secrets_is_preserved' n S ⟨σ,⁻o⟩ ⟨_,o⟩ a b k hyp
+    apply @knowledge_of_secrets_is_preserved n S ⟨σ,⁻o⟩ ⟨_,o⟩ a b k hyp
     simp
 
-/- Note: In Prop 13 and Cor 14 again the parts (i) and (ii) are given by different `k` values.-/
+/- Note: In Prop 12 and Cor 13 again the parts (i) and (ii) are given by different `k` values.-/
 
-/-- Proposition 13. -/
+/-- Proposition 12. -/
 lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
   ⊨ (K a ((b,k) @ b)) ⟹ ( ((b,k) @ b) ⋀ ((b,k) @ a) ⋀ ( ¬' (b, !k) @ a) ) := by
   intro S σ
@@ -812,7 +815,11 @@ lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
       have := knows (S.switch b) ⟨[], by simp [maxOne]⟩ (by simp) (by simp [Dist.switch]; grind)
       simp_all [Dist.switch]
   case cons C σ IH =>
-    cases ra : roleOfIn a C -- "For σ = τ.acᴷ ..."
+    cases ra : roleOfIn a C -- "For σ = τ.bcᴷ we distnguish ..."
+    case Other => -- "where b,c ≠ a"
+      have := @not_in_call_then_invariant _ k _ _ ra b S σ o
+      specialize IH (⁻o) (this.mp knows) -- induction
+      simp_all [eval, not_in_call_then_invariant_resultSet ra S σ o]
     case Caller =>
       -- "... we distinguish two subcases."
       by_cases h : eval S ⟨σ,⁻o⟩ (K a ((b,k) @ b))
@@ -825,7 +832,7 @@ lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
           refine ⟨?_, ?_, ?_⟩
           · simp_all [eval]
           · -- use Lemma 9 here? how?
-            have fromLemma9 := @knowledge_of_secrets_is_preserved' _ S ⟨σ,⁻o⟩ ⟨C_copy :: σ, o⟩ a b k sorry (by simp)
+            have fromLemma9 := @knowledge_of_secrets_is_preserved _ S ⟨σ,⁻o⟩ ⟨C_copy :: σ, o⟩ a b k sorry (by simp)
             have := true_of_knowldege fromLemma9
             unfold C_copy at this
             simp at this
@@ -838,12 +845,8 @@ lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
     case Callee =>
       -- analogous?
       sorry
-    case Other => -- "where b,c ≠ a"
-      have := @not_in_call_then_invariant _ k _ _ ra b S σ o
-      specialize IH (⁻o) (this.mp knows) -- induction
-      simp_all [eval, not_in_call_then_invariant_resultSet ra S σ o]
 
-/-- Corollary 14. -/
+/-- Corollary 13. -/
 lemma knowledge_is_justified_true_belief {n} {a b : @Agent n} :
     ⊨ K a ((b,k) @ b) ⇔ K a ( ((b,k) @ b) ⋀ ((b,k) @ a) ⋀ ( ¬' (b, !k) @ a) ) := by
   intro S σ
