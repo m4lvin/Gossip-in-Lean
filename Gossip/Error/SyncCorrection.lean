@@ -165,7 +165,7 @@ lemma Sequence.maxOne_cons : maxOne (C :: σ) → maxOne σ := by
   cases C <;> simp [maxOne] at * <;> aesop
 
 /-- If `o` proves that `C :: σ` has at most one error then we use the
-short notation `⁻o` for the prove that `σ` has at most one error. -/
+short notation `⁻o` to get a proof that `σ` has at most one error. -/
 notation "⁻" o:arg => Sequence.maxOne_cons o
 
 /-- Sequence with at most one error. -/
@@ -205,8 +205,9 @@ def resultSet (i : @Agent n) : @Dist n → @OSequence n → Set (@Value n)
     /- (**) Values that `i` knows to be wrong after the call (and can thus delete).
     The `sel` here decides which part of `contribSet` agent `a` may see (namely: not its own). -/
     let delete sel : Set Value := { ⟨j, d⟩ | ∀ T τ D, equiv i (S,⟨⟨σ,⁻o⟩,rfl⟩) (T,τ)
-                                                → roleOfIn i C = roleOfIn i D
+                                                → roleOfIn i C = roleOfIn i D -- must be ≠ Other
                                                 → sel (contribSet S ⟨σ,⁻o⟩ C) = sel (contribSet T τ D)
+                                                → C.pair = D.pair -- involved, so observe the pair!
                                                 → eval T τ (Has j (j, !d)) }
     match C, roleOfIn i C with
       -- Not involved:
@@ -250,7 +251,6 @@ def equiv {k} (a : @Agent n) : (@Dist n × {σ : @OSequence n // σ.length = k})
         | Other => True
         | Caller => (contribSet S ⟨σ,⁻o⟩ C).2 = (contribSet T ⟨τ,⁻q⟩ D).2 ∧ C.pair = D.pair
         | Callee => (contribSet S ⟨σ,⁻o⟩ C).1 = (contribSet T ⟨τ,⁻q⟩ D).1 ∧ C.pair = D.pair
-
 termination_by
   Sσ _ => (Sσ.2.1.length, 0) -- should be above contribSet
 decreasing_by
@@ -485,13 +485,13 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
           simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
           rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
         · simp_all [← IH, ← equiv_then_know_same prev_equ]
-          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
-          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
+          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, same_contrib, role2, equ2, ndk⟩
+          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], same_p, ndk⟩
           · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
           · rw [← role2]; try simp [roleOfIn]
         · simp_all [equiv_then_know_same prev_equ]
-          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
-          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
+          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, same_contrib, role2, equ2, ndk⟩
+          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], same_p, ndk⟩
           · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
           · rw [← role2]; try simp [roleOfIn]
     case Callee => -- second of three outer cases, very similar to `Caller`
@@ -514,13 +514,13 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
           simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
           rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
         · simp_all [← IH, ← equiv_then_know_same prev_equ]
-          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
-          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
+          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, same_contrib, role2, equ2, ndk⟩
+          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], same_p, ndk⟩
           · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
           · rw [← role2]; try simp [roleOfIn]
         · simp_all [equiv_then_know_same prev_equ]
-          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_contrib_2, role2, equ2, ndk⟩
-          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], ndk⟩
+          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, same_contrib, role2, equ2, ndk⟩
+          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], same_p, ndk⟩
           · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
           · rw [← role2]; try simp [roleOfIn]
     case Other => -- third out of three outer cases, easy
@@ -751,7 +751,7 @@ lemma not_in_call_then_invariant_kv {a : @Agent n} {C : @Call n}
         | ⌜d^c e⌝ => ⌜d e⌝
         | ⌜d e^c⌝ => ⌜d e⌝
       have h' : roleOfIn a CnoErr = Other := by unfold CnoErr; cases C <;> simp_all
-      apply know_after T ⟨CnoErr :: τ, ?_⟩ (by simp [OSequence.length]; exact same_len)
+      apply know_after T ⟨CnoErr :: τ.1, ?_⟩ (by simp [OSequence.length]; exact same_len)
       · unfold equiv; simp [h, h', equ]
       · unfold CnoErr; cases C <;> simp [maxOne]
     · right
@@ -762,7 +762,7 @@ lemma not_in_call_then_invariant_kv {a : @Agent n} {C : @Call n}
         | ⌜d^c e⌝ => ⌜d e⌝
         | ⌜d e^c⌝ => ⌜d e⌝
       have h' : roleOfIn a CnoErr = Other := by unfold CnoErr; cases C <;> simp_all
-      apply know_after T ⟨CnoErr :: τ, ?_⟩ (by simp [OSequence.length]; exact same_len)
+      apply know_after T ⟨CnoErr :: τ.1, ?_⟩ (by simp [OSequence.length]; exact same_len)
       · unfold equiv; simp [h, h', equ]
       · unfold CnoErr; cases C <;> simp [maxOne]
   · intro hyp
@@ -801,7 +801,7 @@ lemma not_in_call_then_invariant_k {k} {a : @Agent n} {C : @Call n}
     apply @knowledge_of_secrets_is_preserved n S ⟨σ,⁻o⟩ ⟨_,o⟩ a b k hyp
     simp
 
-lemma caller_keeps_known_correct_value {a b : @Agent n} {k} C
+lemma caller_keeps_known_value {a b : @Agent n} {k} C
     (ra : roleOfIn a C = Caller) S σ o
     (know_before : S⌈⟨σ, ⁻o⟩⌉ ⊧ K a ((b, k)@b))
     (had_before : S⌈⟨σ,⁻o⟩⌉ ⊧ (b, k)@a)
@@ -835,7 +835,7 @@ lemma caller_keeps_known_correct_value {a b : @Agent n} {k} C
       use ⌜a c^d⌝ -- but here the ^d *does* matter
       simp_all [contribSet]
 
-lemma caller_rejects_opposite_of_known_correct_value {a b : @Agent n} {k} C
+lemma caller_rejects_opposite_of_known_value {a b : @Agent n} {k} C
     (ra : roleOfIn a C = Caller) S σ o
     (know_before : S⌈⟨σ,⁻o⟩⌉ ⊧ K a ((b, k)@b))
     : S⌈⟨C :: σ, o⟩⌉ ⊧ ( ¬'(b, !k)@a) := by
@@ -850,9 +850,40 @@ lemma caller_rejects_opposite_of_known_correct_value {a b : @Agent n} {k} C
     absurd h2
     exact know_before
 
-/- Note: In Prop 12 and Cor 13 again the parts (i) and (ii) are given by different `k` values.-/
+/-- Footnote 1. "in fact the knowledge is already there" -/
+lemma caller_rejects_opposite_of_afterwards_known_value {a b : @Agent n} {k} C
+    (ra : roleOfIn a C = Caller) S σ o
+    (know_after : S⌈⟨C :: σ, o⟩⌉ ⊧ K a ((b, k)@b))
+    : S⌈⟨C :: σ, o⟩⌉ ⊧ ( ¬'(b, !k)@a) := by
+  unfold eval at know_after
+  unfold eval eval
+  unfold resultSet
+  simp [ra]
+  rcases C with ⟨a',c⟩|⟨a',d,c⟩|⟨a',c,d⟩ <;> simp at ra <;> subst ra <;> simp only <;> simp_all
+  · intro h1 h2 T τ same_len equ D role_D same_set same_p
+    -- let DnoErr : Call := match D with -- we remove the error from `D` if needed.
+    --   | ⌜d e⌝ => ⌜d e⌝
+    --   | ⌜d^c e⌝ => ⌜d e⌝
+    --   | ⌜d e^c⌝ => ⌜d e⌝
+    /- QUESTION: Why must `c` also be in call `D` now? -/
+    -- NOTE: this should be resolved now with the additional "same pair" condition in the ** def
+    apply know_after T ⟨⌜a c⌝ :: τ.1, by simp [maxOne]⟩ -- Do we want `⌜a c⌝` or `D` here??
+    · unfold equiv
+      simp [equ,contribSet]
+      simp [contribSet] at same_set
+      -- HERE is the issue actually discussed in the paper:
+      -- we have that `D` is the same agent pair and thus `c` is used here too,
+      -- but if `D` contains an error then they might contribute a different set?!?!
+      -- TRY NEXT: use `DnoErr` above.
+      sorry
+    · simp [OSequence.length, ← same_len]
+  · -- fstE case, should be fairly analogous
+    sorry
+  · -- sndE case, should be fairly analogous
+    sorry
 
-/-- Proposition 12. -/
+/-- Proposition 12.
+Again the parts (i) and (ii) are given by different `k` values. -/
 lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
   ⊨ (K a ((b,k) @ b)) ⟹ ( ((b,k) @ b) ⋀ ((b,k) @ a) ⋀ ( ¬' (b, !k) @ a) ) := by
   intro S σ
@@ -880,28 +911,24 @@ lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
       rw [eval_con, eval_con]
       -- "We distinguish two subcases."
       by_cases h : eval S ⟨σ,⁻o⟩ (K a ((b,k) @ b))
-      · -- If S, σ |= Ka b b, by induction we can conclude that S, σ |= bb ∧ ba ∧ ¬ba:
+      · -- "If S, σ |= Ka b b, by induction we can conclude that S, σ |= ...":
         specialize IH (⁻o) h
         rw [eval_con, eval_con] at IH
-        -- Again from stubbornness and again from the call semantics, -- ????
-        -- but now for involved agents (value b for a is preserved in
-        -- the union, whereas value b either remains absent, or in case contributed
-        -- by agent c is discarded because in the ∗ set),
-        -- we conclude that S, σ.acκ |= bb ∧ ba ∧ ¬ba.
-        -- So in this case ∗ removal may be involved.
+        -- "Again from stubbornness and again from the call semantics, ..."
         refine ⟨by simp_all, ?_, ?_⟩
-        · exact caller_keeps_known_correct_value C ra _ _ _ h IH.2.1
-        · exact caller_rejects_opposite_of_known_correct_value _ ra _ _ _ h
+        · exact caller_keeps_known_value C ra S σ o h IH.2.1
+        · exact caller_rejects_opposite_of_known_value C ra S σ o h
       · -- If S, σ |= ¬Kabb, this is the harder case, and the case of most interest in the proof.
         clear IH -- here we do not use it?
-        refine ⟨?_, ?_, ?_⟩
-        -- We show the three conjuncts separately, where the (hardest) second comes last.
-        -- TODO ...
-        · sorry
-        · sorry
-        · sorry
+        -- "We show the three conjuncts separately, where the (hardest) second comes last.""
+        refine ⟨?one, ?two, ?three⟩
+        case one => exact true_of_knowldege knows
+        case three => exact caller_rejects_opposite_of_afterwards_known_value C ra S σ o knows
+        case two =>
+          -- TODO: The hardest case.
+          sorry
     case Callee =>
-      -- analogous?
+      -- Analogous, but will need `callee_...` lemmas instead of `caller_...`.
       sorry
 
 /-- Corollary 13. -/
