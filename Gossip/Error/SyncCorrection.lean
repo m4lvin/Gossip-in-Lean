@@ -801,7 +801,7 @@ lemma not_in_call_then_invariant_k {k} {a : @Agent n} {C : @Call n}
     apply @knowledge_of_secrets_is_preserved n S ⟨σ,⁻o⟩ ⟨_,o⟩ a b k hyp
     simp
 
-theorem caller_keeps_known_correct_value {a b : @Agent n} {k} C
+lemma caller_keeps_known_correct_value {a b : @Agent n} {k} C
     (ra : roleOfIn a C = Caller) S σ o
     (know_before : S⌈⟨σ, ⁻o⟩⌉ ⊧ K a ((b, k)@b))
     (had_before : S⌈⟨σ,⁻o⟩⌉ ⊧ (b, k)@a)
@@ -834,6 +834,21 @@ theorem caller_keeps_known_correct_value {a b : @Agent n} {k} C
     · use S, ⟨σ,⁻o⟩; simp
       use ⌜a c^d⌝ -- but here the ^d *does* matter
       simp_all [contribSet]
+
+lemma caller_rejects_opposite_of_known_correct_value {a b : @Agent n} {k} C
+    (ra : roleOfIn a C = Caller) S σ o
+    (know_before : S⌈⟨σ,⁻o⟩⌉ ⊧ K a ((b, k)@b))
+    : S⌈⟨C :: σ, o⟩⌉ ⊧ ( ¬'(b, !k)@a) := by
+  have bkb := true_of_knowldege know_before
+  rcases C with ⟨a',c⟩|⟨a',d,c⟩|⟨a',c,d⟩ <;> simp at ra <;> subst ra
+  all_goals
+    unfold eval
+    intro h
+    unfold eval resultSet at h
+    simp [roleOfIn] at h
+    rcases h with ⟨⟨h1, h2⟩, h3⟩
+    absurd h2
+    exact know_before
 
 /- Note: In Prop 12 and Cor 13 again the parts (i) and (ii) are given by different `k` values.-/
 
@@ -875,9 +890,8 @@ lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
         -- we conclude that S, σ.acκ |= bb ∧ ba ∧ ¬ba.
         -- So in this case ∗ removal may be involved.
         refine ⟨by simp_all, ?_, ?_⟩
-        · apply caller_keeps_known_correct_value <;> tauto
-        · -- TODO: lemma something like `caller_rejects_opposite_of_known_correct_value`?
-          sorry
+        · exact caller_keeps_known_correct_value C ra _ _ _ h IH.2.1
+        · exact caller_rejects_opposite_of_known_correct_value _ ra _ _ _ h
       · -- If S, σ |= ¬Kabb, this is the harder case, and the case of most interest in the proof.
         clear IH -- here we do not use it?
         refine ⟨?_, ?_, ?_⟩
