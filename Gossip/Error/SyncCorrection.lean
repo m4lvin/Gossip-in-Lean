@@ -208,6 +208,7 @@ def resultSet (i : @Agent n) : @Dist n → @OSequence n → Set (@Value n)
                                                 → roleOfIn i C = roleOfIn i D -- must be ≠ Other
                                                 → sel (contribSet S ⟨σ,⁻o⟩ C) = sel (contribSet T τ D)
                                                 → C.pair = D.pair -- involved, so observe the pair!
+                                                → maxOne (D :: τ) -- ignore forbidden sequences
                                                 → eval T τ (Has j (j, !d)) }
     match C, roleOfIn i C with
       -- Not involved:
@@ -485,13 +486,13 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
           simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
           rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
         · simp_all [← IH, ← equiv_then_know_same prev_equ]
-          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, same_contrib, role2, equ2, ndk⟩
-          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], same_p, ndk⟩
+          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, mO, same_contrib, role2, equ2, ndk⟩
+          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], mO, same_p, ndk⟩
           · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
           · rw [← role2]; try simp [roleOfIn]
         · simp_all [equiv_then_know_same prev_equ]
-          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, same_contrib, role2, equ2, ndk⟩
-          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], same_p, ndk⟩
+          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, mO, same_contrib, role2, equ2, ndk⟩
+          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], mO, same_p, ndk⟩
           · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
           · rw [← role2]; try simp [roleOfIn]
     case Callee => -- second of three outer cases, very similar to `Caller`
@@ -514,13 +515,13 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
           simp only [Set.mem_diff, Set.mem_union, Set.mem_setOf_eq, not_forall] at dk_in
           rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
         · simp_all [← IH, ← equiv_then_know_same prev_equ]
-          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, same_contrib, role2, equ2, ndk⟩
-          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], same_p, ndk⟩
+          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, mO, same_contrib, role2, equ2, ndk⟩
+          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], mO, same_p, ndk⟩
           · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
           · rw [← role2]; try simp [roleOfIn]
         · simp_all [equiv_then_know_same prev_equ]
-          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, same_contrib, role2, equ2, ndk⟩
-          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], same_p, ndk⟩
+          rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, mO, same_contrib, role2, equ2, ndk⟩
+          refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], mO, same_p, ndk⟩
           · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
           · rw [← role2]; try simp [roleOfIn]
     case Other => -- third out of three outer cases, easy
@@ -613,7 +614,7 @@ lemma stubbornness m σ (h : σ.length = m) :
           grind
         · refine ⟨S, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ?_⟩
           use c_copy
-          simp [c_copy, eval]
+          simp [c_copy, eval, o]
           rw [@IH _ _ σ (⁻o) h]
           simpa [roleOfIn]
     case Callee =>
@@ -860,27 +861,12 @@ lemma caller_rejects_opposite_of_afterwards_known_value {a b : @Agent n} {k} C
   unfold resultSet
   simp [ra]
   rcases C with ⟨a',c⟩|⟨a',d,c⟩|⟨a',c,d⟩ <;> simp at ra <;> subst ra <;> simp only <;> simp_all
-  · intro h1 h2 T τ same_len equ D role_D same_set same_p
-    -- let DnoErr : Call := match D with -- we remove the error from `D` if needed.
-    --   | ⌜d e⌝ => ⌜d e⌝
-    --   | ⌜d^c e⌝ => ⌜d e⌝
-    --   | ⌜d e^c⌝ => ⌜d e⌝
-    /- QUESTION: Why must `c` also be in call `D` now? -/
-    -- NOTE: this should be resolved now with the additional "same pair" condition in the ** def
-    apply know_after T ⟨⌜a c⌝ :: τ.1, by simp [maxOne]⟩ -- Do we want `⌜a c⌝` or `D` here??
-    · unfold equiv
-      simp [equ,contribSet]
-      simp [contribSet] at same_set
-      -- HERE is the issue actually discussed in the paper:
-      -- we have that `D` is the same agent pair and thus `c` is used here too,
-      -- but if `D` contains an error then they might contribute a different set?!?!
-      -- TRY NEXT: use `DnoErr` above.
-      sorry
-    · simp [OSequence.length, ← same_len]
-  · -- fstE case, should be fairly analogous
-    sorry
-  · -- sndE case, should be fairly analogous
-    sorry
+  all_goals
+    intro h1 h2 T τ same_len equ D role_D same_set same_p mO
+    apply know_after T ⟨D :: τ.1, mO⟩
+    · simp_all [equiv, contribSet]
+      cases D <;> cases same_p <;> simp_all [roleOfIn]
+    · rw [OSequence.length, ← same_len]; rfl
 
 /-- Proposition 12.
 Again the parts (i) and (ii) are given by different `k` values. -/
@@ -977,7 +963,7 @@ lemma example_correct_belief_does_not_imply_knowledege (a b : Agent) (h : a ≠ 
       simp
     · refine ⟨_, _, ⟨ ⟨ ?_, equiv_refl⟩ , ?_ ⟩  ⟩ <;> simp
       use ⌜a b⌝
-      simp [contribSet]
+      simp [contribSet, maxOne]
   · unfold eval
     constructor
     · simp [eval, resultSet, contribSet]
