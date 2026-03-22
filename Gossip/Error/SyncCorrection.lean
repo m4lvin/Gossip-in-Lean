@@ -321,6 +321,10 @@ lemma eval_impl : S⌈σ⌉ ⊧ φ1 ⟹ φ2 ↔ (S⌈σ⌉ ⊧ φ1 → S⌈σ⌉
   simp [eval]
 
 -- @[simp]
+lemma eval_con : S⌈σ⌉ ⊧ (φ1 ⋀ φ2) ↔ S⌈σ⌉ ⊧ φ1 ∧ S⌈σ⌉ ⊧ φ2 := by
+  simp [eval]
+
+-- @[simp]
 lemma eval_dis : S⌈σ⌉ ⊧ φ1 ⋁ φ2 ↔ S⌈σ⌉ ⊧ φ1 ∨ S⌈σ⌉ ⊧ φ2 := by
   simp [eval]; tauto
 
@@ -722,16 +726,14 @@ lemma know_your_own {a : @Agent n} :
     rw [know_self _ _ _ _ _ equ] at h
     exact h
 
-/-- OLD?
-Helper for Prop 13 "iff (call semantics)" -/
+/-- Helper for Prop 12 "iff (call semantics)" -/
 lemma not_in_call_then_invariant_resultSet {a : @Agent n} {C : @Call n}
     (h : roleOfIn a C = Other) S σ o
     : S⌈⟨C :: σ, o⟩⌉a = S⌈⟨σ, ⁻o⟩⌉a := by
   conv => left; unfold resultSet
   simp [h]
 
-/-- OLD
-Helper for Prop 12 "iff (semantics of formulas and observation relation)" -/
+/-- Helper for Prop 12 "iff (semantics of formulas and observation relation)" -/
 lemma not_in_call_then_invariant_kv {a : @Agent n} {C : @Call n}
     (h : roleOfIn a C = Other) b S σ o
     : eval S ⟨C :: σ,  o⟩ (Kv a b)
@@ -767,29 +769,34 @@ lemma not_in_call_then_invariant_kv {a : @Agent n} {C : @Call n}
     apply kv_of_secrets_is_preserved hyp
     simp
 
-/-- OLD
-Stronger value-specific helper for Prop 12 "iff (semantics of formulas and observation relation)" -/
-lemma not_in_call_then_invariant {a : @Agent n} {C : @Call n}
+/-- Stronger value-specific helper for Prop 12 "iff (semantics of formulas and observation relation)" -/
+lemma not_in_call_then_invariant_k {a : @Agent n} {C : @Call n}
     (h : roleOfIn a C = Other) b S σ o
     : eval S ⟨C :: σ,  o⟩ (K a (⟨b, k⟩ @ b))
     ↔ eval S ⟨     σ, ⁻o⟩ (K a (⟨b, k⟩ @ b)) := by
   constructor
   · intro know_after
-    unfold eval eval at *
-    -- unsure from here
-    simp only [Subtype.forall, OSequence.length_def, List.length_cons] at *
-    intro T τ same_len equ
-    let CnoErr : Call := match C with -- we remove the error from `C` if needed.
-      | ⌜d e⌝ => ⌜d e⌝
-      | ⌜d^c e⌝ => ⌜d e⌝
-      | ⌜d e^c⌝ => ⌜d e⌝
-    have h' : roleOfIn a CnoErr = Other := by unfold CnoErr; cases C <;> simp_all
-    sorry
-    /-
-    apply know_after T ⟨CnoErr :: τ, ?_⟩ (by simp [OSequence.length]; exact same_len)
-    · unfold equiv; simp [h, h', equ]
-    · unfold CnoErr; cases C <;> simp [maxOne]
-    -/
+    have := @not_in_call_then_invariant_kv n a C h b S σ o
+    rw [eval_dis] at this
+    cases k
+    · have := this.mp (Or.inr know_after)
+      rw [eval_dis] at this
+      rcases this with h|h
+      · exfalso
+        have := true_of_knowldege h
+        have := true_of_knowldege know_after
+        simp at *
+        grind
+      · exact h
+    · have := this.mp (Or.inl know_after)
+      rw [eval_dis] at this
+      rcases this with h|h
+      · exact h
+      · exfalso
+        have := true_of_knowldege h
+        have := true_of_knowldege know_after
+        simp at *
+        grind
   · intro hyp
     apply @knowledge_of_secrets_is_preserved n S ⟨σ,⁻o⟩ ⟨_,o⟩ a b k hyp
     simp
@@ -803,7 +810,7 @@ lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
   rw [eval_impl]
   intro knows
   rcases σ with ⟨σ,o⟩
-  induction σ -- TODO: induction on length, not on specific sequence? use `cases`?
+  induction σ -- TODO: `cases` induction on length, not specific sequence?
   case nil =>
     simp [eval]
     have := true_of_knowldege knows
@@ -817,31 +824,36 @@ lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
   case cons C σ IH =>
     cases ra : roleOfIn a C -- "For σ = τ.bcᴷ we distnguish ..."
     case Other => -- "where b,c ≠ a"
-      have := @not_in_call_then_invariant _ k _ _ ra b S σ o
+      have := @not_in_call_then_invariant_k _ k _ _ ra b S σ o
       specialize IH (⁻o) (this.mp knows) -- induction
       simp_all [eval, not_in_call_then_invariant_resultSet ra S σ o]
-    case Caller =>
-      -- "... we distinguish two subcases."
+    case Caller => -- "assume S,σ.ac^κ ⊨ Kₐ b_b" (`knows`)
+      rw [eval_con, eval_con]
+      -- "We distinguish two subcases."
       by_cases h : eval S ⟨σ,⁻o⟩ (K a ((b,k) @ b))
-      · -- "Either already ..."
+      · -- If S, σ |= Ka b b, by induction we can conclude that S, σ |= bb ∧ ba ∧ ¬ba:
         specialize IH (⁻o) h
-        let C_copy := C
-        cases C <;> simp_all <;> subst ra
-        all_goals
-          simp [eval]
-          refine ⟨?_, ?_, ?_⟩
-          · simp_all [eval]
-          · -- use Lemma 9 here? how?
-            have fromLemma9 := @knowledge_of_secrets_is_preserved _ S ⟨σ,⁻o⟩ ⟨C_copy :: σ, o⟩ a b k sorry (by simp)
-            have := true_of_knowldege fromLemma9
-            unfold C_copy at this
-            simp at this
-            sorry
-          · -- same?
-            sorry
-      · -- "Or ..."
+        rw [eval_con, eval_con] at IH
+        -- Again from stubbornness and again from the call semantics, -- ????
+        -- but now for involved agents (value b for a is preserved in
+        -- the union, whereas value b either remains absent, or in case contributed
+        -- by agent c is discarded because in the ∗ set),
+        -- we conclude that S, σ.acκ |= bb ∧ ba ∧ ¬ba.
+        -- So in this case ∗ removal may be involved.
+        refine ⟨by simp_all, ?_, ?_⟩
+        · sorry
+          -- have := @knowledge_of_secrets_is_preserved n S ⟨σ,⁻o⟩ ⟨C::σ, o⟩ a b k h (by simp)
+          -- have := @stubbornness n S
+          -- TODO
+        · sorry
+      · -- If S, σ |= ¬Kabb, this is the harder case, and the case of most interest in the proof.
         clear IH -- here we do not use it?
-        sorry
+        refine ⟨?_, ?_, ?_⟩
+        -- We show the three conjuncts separately, where the (hardest) second comes last.
+        -- TODO ...
+        · sorry
+        · sorry
+        · sorry
     case Callee =>
       -- analogous?
       sorry
