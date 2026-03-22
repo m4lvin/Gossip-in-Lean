@@ -868,6 +868,53 @@ lemma caller_rejects_opposite_of_afterwards_known_value {a b : @Agent n} {k} C
       cases D <;> cases same_p <;> simp_all [roleOfIn]
     · rw [OSequence.length, ← same_len]; rfl
 
+-- Maybe rename this later ;-)
+lemma caller_the_hard_case {a b : @Agent n} {k} S C σ
+    (o : maxOne (C :: σ))
+    (knows : S⌈⟨C :: σ, o⟩⌉ ⊧ K a ((b, k)@b))
+    (ra : roleOfIn a C = Caller)
+    (not_know_before : ¬ S⌈⟨σ,⁻o⟩⌉ ⊧ K a ((b, k)@b))
+    : S⌈⟨C :: σ, o⟩⌉ ⊧ (b, k)@a := by
+  cases C
+  case normal _a c =>
+    simp at ra; subst ra
+    by_cases ha : S⌈⟨σ,⁻o⟩⌉ ⊧ ((b, k)@a) <;> by_cases hc : S⌈⟨σ,⁻o⟩⌉ ⊧ ((b, k)@c)
+    · simp_all [eval,resultSet]
+      constructor
+      · refine ⟨S, ⟨⟨σ,⁻o⟩, by simp ⟩, knows _ ⟨_,o⟩ (by simp) equiv_refl⟩
+      · refine ⟨S, ⟨σ,⁻o⟩, ⟨⟨rfl, equiv_refl⟩, ⌜a c⌝, by simp, rfl, rfl, o, ?_⟩⟩
+        apply knows S ⟨_, o⟩ (by simp) equiv_refl
+    · simp_all [eval,resultSet]
+      constructor
+      · refine ⟨S, ⟨⟨σ,⁻o⟩, by simp ⟩, knows _ ⟨_,o⟩ (by simp) equiv_refl⟩
+      · refine ⟨S, ⟨σ,⁻o⟩, ⟨⟨rfl, equiv_refl⟩, ⌜a c⌝, by simp, rfl, rfl, o, ?_⟩⟩
+        apply knows S ⟨_, o⟩ (by simp) equiv_refl
+    · simp_all [eval,resultSet]
+      constructor
+      · refine ⟨S, ⟨⟨σ,⁻o⟩, by simp ⟩, knows _ ⟨_,o⟩ (by simp) equiv_refl⟩
+      · refine ⟨S, ⟨σ,⁻o⟩, ⟨⟨rfl, equiv_refl⟩, ⌜a c⌝, by simp, rfl, rfl, o, ?_⟩⟩
+        apply knows S ⟨_, o⟩ (by simp) equiv_refl
+    · simp_all [eval,resultSet]
+      -- "We therefore only have the following *four* remaining cases ..."
+      -- "First ..." That is `Dist.switch`.
+      -- "Second ..."
+      rcases not_know_before with ⟨T, ⟨τ, same_len, equ⟩, Tb_not_k⟩
+      absurd knows
+      simp
+      by_cases (b, !k) ∉ S⌈⟨σ,⁻o⟩⌉a <;> by_cases (b, !k) ∉ S⌈⟨σ,⁻o⟩⌉c
+      · refine ⟨T, ⟨⟨⌜a c⌝ :: τ.1, by simp_all [maxOne]⟩, ?_⟩ , by simp [*]⟩
+        simp [equiv, OSequence.length, contribSet, ← same_len, equ]
+        sorry
+      · sorry
+      · sorry
+      · sorry
+  case fstE =>
+    -- unsure how analogous this will be.
+    sorry
+  case sndE =>
+    -- unsure how analogous this will be.
+    sorry
+
 /-- Proposition 12.
 Again the parts (i) and (ii) are given by different `k` values. -/
 lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
@@ -910,9 +957,7 @@ lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
         refine ⟨?one, ?two, ?three⟩
         case one => exact true_of_knowldege knows
         case three => exact caller_rejects_opposite_of_afterwards_known_value C ra S σ o knows
-        case two =>
-          -- TODO: The hardest case.
-          sorry
+        case two => exact caller_the_hard_case S C σ o knows ra h
     case Callee =>
       -- Analogous, but will need `callee_...` lemmas instead of `caller_...`.
       sorry
