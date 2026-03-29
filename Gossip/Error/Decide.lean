@@ -8,9 +8,15 @@ import Gossip.Error.Basic
 
 namespace Error
 
-def Value.all : List (@Value n) := sorry
+def Value.all : List (@Value n) :=
+  (List.range n).attach.flatMap (fun a => [ ⟨⟨a.1, by grind⟩, true⟩
+                                          , ⟨⟨a.1, by grind⟩, false⟩ ])
 
-def Value.all_spec : x ∈ Value.all := sorry
+def Value.all_spec : x ∈ Value.all := by
+  rcases x with ⟨a,b⟩
+  unfold Value.all
+  simp
+  grind
 
 /-! ## List of all distributions -/
 
@@ -43,18 +49,16 @@ def Call.castSucc {n} : @Call n → @Call (n+1)
   | .sndE a b c => .sndE a.castSucc b.castSucc c.castSucc
 
 def Call.allAmong {n : Nat} : @Agent n → @Agent n → List (@Call n)
-  | a, b => [ .normal a b, .normal b a ]
-        ++ (List.range n).attach.map (fun c => .fstE a ⟨c.1, by grind⟩ b)
-        ++ (List.range n).attach.map (fun c => .fstE b ⟨c.1, by grind⟩ a)
-        ++ (List.range n).attach.map (fun c => .sndE a b ⟨c.1, by grind⟩)
-        ++ (List.range n).attach.map (fun c => .sndE b a ⟨c.1, by grind⟩)
+  | a, b => .normal a b
+            :: (List.range n).attach.map (fun c => .fstE a ⟨c.1, by grind⟩ b)
+            ++ (List.range n).attach.map (fun c => .sndE a b ⟨c.1, by grind⟩)
 
 -- small worry: is it okay to let an agent call itself?
 
-def Call.all : {n : Nat} → List (@Call n)
-  | 0 => [ ]
-  | k+1 => (@Call.all k).map Call.castSucc ++
-      (List.range k).attach.flatMap (fun b => Call.allAmong ⟨k,by grind⟩ ⟨b.1,by grind⟩)
+def Call.all {n : Nat} : List (@Call n) :=
+  (List.range n).attach.flatMap (fun a =>
+    (List.range n).attach.flatMap (fun b =>
+      Call.allAmong ⟨a.1,by grind⟩ ⟨b.1,by grind⟩))
 
 lemma Call.all_spec (C : @Call n) : C ∈ Call.all := by
   cases n
@@ -62,8 +66,7 @@ lemma Call.all_spec (C : @Call n) : C ∈ Call.all := by
     exfalso; cases C <;> next a => cases a; grind
   case succ n =>
     unfold Call.all
-    simp
-    sorry
+    cases C <;> simp [allAmong] <;> grind
 
 /-! ## List of all OSequences of a given length -/
 
@@ -128,26 +131,66 @@ instance instDecResultSetMem {n} {S : @Dist n} {σ : OSequence} {a : Agent} {x :
     exact decEq x (a, S a)
   case cons C σ =>
     cases C
+    -- NORMAL
     case normal b c =>
       unfold resultSet roleOfIn
-      by_cases a = b <;> by_cases a = c <;> simp_all
+      by_cases a = b <;> by_cases a = c <;>
+        simp_all only [Classical.not_imp, Set.mem_diff, Set.mem_setOf_eq, Set.mem_union, Set.union_self, exists_and_left, not_forall, ↓reduceIte]
       · refine @instDecidableAnd _ _ (@instDecidableAnd _ _ ?_ ?_) ?_
         · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ b x
         · exact @instDecidableNot _ (@instDecEval n S ⟨σ,⁻o⟩ (Form.K b ((x.1, !x.2)@x.1)))
-        · sorry
+        · refine Decidable.exists_of_list_mem Dist.all_spec (fun T => ?_)
+          refine Decidable.exists_of_list_mem (@OSequence.fixLen_all_spec n σ.length) (fun τ => ?_)
+          refine @instDecidableAnd _ _ instDecEquiv ?_
+          · apply Decidable.exists_of_list_mem Call.all_spec
+            rintro (⟨x,y⟩|⟨x,z,y⟩|⟨x,y,z⟩) <;> by_cases b = x <;> by_cases b = y
+              <;> simp_all [Call.pair] <;> try exact instDecidableFalse
+            all_goals
+              refine @instDecidableAnd _ _ ?_ (@instDecidableAnd _ _ ?_ ?_)
+              <;> try refine @instDecidableAnd _ _ ?_ ?_
+            all_goals try exact instDecMaxOne
+            all_goals try exact @instDecidableNot _ instDecEval
+            all_goals apply @instDecContribSetTwoEq n σ.length S T ⟨⟨σ,o⟩, rfl⟩ τ
       · refine @instDecidableAnd _ _ (@instDecidableAnd _ _ (@instDecidableOr _ _ ?_ ?_) ?_) ?_
         · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ b x
         · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ c x
         · exact @instDecidableNot _ (@instDecEval n S ⟨σ,⁻o⟩ (Form.K b ((x.1, !x.2)@x.1)))
-        · sorry
+        · refine Decidable.exists_of_list_mem Dist.all_spec (fun T => ?_)
+          refine Decidable.exists_of_list_mem (@OSequence.fixLen_all_spec n σ.length) (fun τ => ?_)
+          refine @instDecidableAnd _ _ instDecEquiv ?_
+          · apply Decidable.exists_of_list_mem Call.all_spec
+            rintro (⟨x,y⟩|⟨x,z,y⟩|⟨x,y,z⟩) <;> by_cases b = x <;> by_cases b = y
+              <;> simp_all [Call.pair] <;> try exact instDecidableFalse
+            all_goals
+              refine @instDecidableAnd _ _ ?_ (@instDecidableAnd _ _ ?_ ?_)
+              <;> try refine @instDecidableAnd _ _ ?_ ?_
+            all_goals try exact instDecMaxOne
+            all_goals try exact @instDecidableNot _ instDecEval
+            all_goals try apply decEq
+            all_goals apply @instDecContribSetTwoEq n σ.length S T ⟨⟨σ,o⟩, rfl⟩ τ
       · refine @instDecidableAnd _ _ (@instDecidableAnd _ _ (@instDecidableOr _ _ ?_ ?_) ?_) ?_
         · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ b x
         · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ c x
         · exact @instDecidableNot _ (@instDecEval n S ⟨σ,⁻o⟩ (Form.K c ((x.1, !x.2)@x.1)))
-        · sorry
+        · refine Decidable.exists_of_list_mem Dist.all_spec (fun T => ?_)
+          refine Decidable.exists_of_list_mem (@OSequence.fixLen_all_spec n σ.length) (fun τ => ?_)
+          refine @instDecidableAnd _ _ instDecEquiv ?_
+          · apply Decidable.exists_of_list_mem Call.all_spec
+            rintro (⟨x,y⟩|⟨x,z,y⟩|⟨x,y,z⟩) <;> by_cases b = x <;> by_cases b = y
+              <;> simp_all [Call.pair] <;> try exact instDecidableFalse
+            all_goals
+              refine @instDecidableAnd _ _ ?_ (@instDecidableAnd _ _ ?_ ?_)
+            all_goals try refine @instDecidableAnd _ _ ?_ ?_
+            all_goals try refine @instDecidableAnd _ _ ?_ ?_
+            all_goals try exact instDecMaxOne
+            all_goals try exact @instDecidableNot _ instDecEval
+            all_goals try apply decEq
+            all_goals apply @instDecContribSetOneEq n σ.length S T ⟨⟨σ,o⟩, rfl⟩ τ
       · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ a x
+    -- fstE, based on copy pasta
     case fstE =>
       sorry
+    -- sndE, based on copy pasta
     case sndE =>
       sorry
 termination_by
@@ -156,8 +199,9 @@ decreasing_by
   all_goals
     apply Prod.Lex.left; grind [OSequence.length] -- Sequence becomes shorter in all cases.
 
-instance instDecResultSetEq {n} {S T : @Dist n} {σ τ : OSequence} {a b : Agent} :
-    Decidable (S⌈σ⌉a = T⌈τ⌉b) := by
+instance instDecResultSetEq {n k} {S T : @Dist n}
+    {σ τ : {σ : @OSequence n // σ.length = k}} {a b}
+    : Decidable (S⌈σ⌉a = T⌈τ⌉b) := by
   rw [Set.ext_iff]
   apply Decidable.forall_of_list_mem (@Value.all_spec _)
   intro x
@@ -165,16 +209,17 @@ instance instDecResultSetEq {n} {S T : @Dist n} {σ τ : OSequence} {a b : Agent
   have := @instDecResultSetMem n T τ b x
   exact instDecidableIff
 termination_by
-  (σ.1.length, 0)
+  (σ.1.length, 1)
 decreasing_by
-  · sorry
-  · sorry
+  · apply Prod.Lex.right; simp
+  · simp only [OSequence.ofLen_length]; apply Prod.Lex.right; simp
 
-instance instDecContribSetOneEq {n} {S T : @Dist n} {σ τ C D} :
-    Decidable ((contribSet S σ C).1 = (contribSet T τ D).1) := by
+instance instDecContribSetOneEq {n k} {S T : @Dist n}
+    {σ τ : {σ : @OSequence n // σ.length = k}} {C D}
+    : Decidable ((contribSet S σ C).1 = (contribSet T τ D).1) := by
   unfold contribSet
   cases C <;> cases D <;> simp
-  · exact @instDecResultSetEq n S T σ τ _ _
+  · exact @instDecResultSetEq n k S T σ τ _ _
   · sorry -- invert
   · exact instDecResultSetEq
   · sorry -- invert
@@ -184,20 +229,24 @@ instance instDecContribSetOneEq {n} {S T : @Dist n} {σ τ C D} :
   · sorry -- invert
   · exact instDecResultSetEq
 termination_by
-  (σ.1.length, 0) -- ??
+  (σ.1.length, 2) -- ??
 decreasing_by
-  · sorry -- ??
-  · sorry -- ??
-  · sorry -- ??
-  · sorry -- ??
+  all_goals
+    apply Prod.Lex.right; simp
 
-instance instDecContribSetTwoEq :
-    Decidable ((contribSet S σ C).2 = (contribSet T τ D).2) := by
+instance instDecContribSetTwoEq {n k} {S T : @Dist n}
+    {σ τ : {σ : @OSequence n // σ.length = k}} {C D}
+    : Decidable ((contribSet S σ.1 C).2 = (contribSet T τ.1 D).2) := by
   sorry
 termination_by
   (σ.1.length, 0)
 
-instance instDecEquiv : Decidable (equiv a ⟨S,σ⟩ (T,τ))  := by
+instance instDecEquiv
+    {n k}
+    {a : @Agent n}
+    {S T : @Dist n}
+    {σ τ : {σ : @OSequence n // σ.length = k}}
+    : Decidable (equiv a ⟨S,σ⟩ ⟨T,τ⟩) := by
   rcases σ with ⟨⟨σ,o⟩,len_σ⟩
   rcases τ with ⟨⟨τ,o'⟩,len_τ⟩
   unfold equiv
@@ -214,10 +263,18 @@ instance instDecEquiv : Decidable (equiv a ⟨S,σ⟩ (T,τ))  := by
     · exact decEq (roleOfIn a C) (roleOfIn a D)
     · cases roleOfIn a C <;> simp
       · refine @instDecidableAnd _ _ ?_ ?_
-        · exact instDecContribSetTwoEq
+        · have := @instDecContribSetTwoEq n (k-1) S T
+            ⟨⟨σ,⁻o⟩, by simp at len_σ; rw [← len_σ]; simp⟩
+            ⟨⟨τ,⁻o'⟩,by simp at len_τ; rw [← len_τ]; simp⟩
+            C D
+          exact this
         · apply decEq
       · refine @instDecidableAnd _ _ ?_ ?_
-        · exact instDecContribSetOneEq
+        · have := @instDecContribSetOneEq n (k-1) S T
+            ⟨⟨σ,⁻o⟩, by simp at len_σ; rw [← len_σ]; simp⟩
+            ⟨⟨τ,⁻o'⟩,by simp at len_τ; rw [← len_τ]; simp⟩
+            C D
+          exact this
         · apply decEq
       · exact instDecidableTrue
 termination_by

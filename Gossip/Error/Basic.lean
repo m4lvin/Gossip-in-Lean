@@ -188,6 +188,10 @@ lemma OSequence.length_def (σ : @Sequence n) h :
   OSequence.length ⟨σ, h⟩ = σ.length := by unfold OSequence.length; simp
 
 @[simp]
+lemma OSequence.ofLen_length (σ : { σ : @OSequence n // σ.length = k }) :
+  σ.1.length = k := by grind
+
+@[simp]
 lemma OSequence.maxOne {σ : @OSequence n} : maxOne σ.1 := by
   cases σ; simp_all
 
@@ -242,7 +246,7 @@ decreasing_by
 /-- (Def 5) Observation relation.
 This is *synchronous*. -/
 def equiv {k} (a : @Agent n) : (@Dist n × {σ : @OSequence n // σ.length = k})
-                                        → (@Dist n × {σ : @OSequence n // σ.length = k}) → Prop
+                             → (@Dist n × {σ : @OSequence n // σ.length = k}) → Prop
   | (S, ⟨⟨[]    ,_⟩,_⟩), (T, ⟨⟨[]    ,_⟩,_⟩) => S a = T a
   | (S, ⟨⟨C :: σ,o⟩,_⟩), (T, ⟨⟨D :: τ,q⟩,_⟩) =>
         @equiv (k-1) a (S,⟨⟨σ,⁻o⟩, by grind [OSequence.length]⟩) (T,⟨⟨τ,⁻q⟩, by grind [OSequence.length]⟩)
