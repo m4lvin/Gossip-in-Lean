@@ -546,49 +546,4 @@ lemma knowledge_is_justified_true_belief {n} {a b : @Agent n} :
   · -- "right to left is obvious"
     grind [eval]
 
-/-! ## Examples -/
-
-/-- Initial distribution with all values set to true. -/
-def ini (n : Nat) : @Dist n := fun _ => true
-
--- FIXME: make it easier to define a state / give a sequence without writing `simp [maxOne]`.
-
-/-- Correct belief need not imply knowledge: given `ini 2`, after an initial call
-`ab` agent `a` correclty believes `b`, but a does not know the secret of `b`, because `a`
-also considers it possible that the call was `a b^b` instead. -/
-lemma example_correct_belief_does_not_imply_knowledege (a b : Agent) (h : a ≠ b) :
-    eval (ini 2) ⟨[ ⌜a b⌝ ], by simp [maxOne]⟩ $
-      (    b @ a)  -- a believes b
-    ⋀ (¬'(‾b @ a)) -- (and does not believe not-b)
-    ⋀ (   b @ b)   -- correctly,
-    ⋀ (¬'(Kv a b)) -- but a does not *know* the value of b.
-    := by
-  unfold ini
-  unfold eval
-  constructor
-  · simp [eval, resultSet, contribSet]
-    constructor
-    · use ini 2
-      unfold ini
-      simp only [and_true]
-      use ⟨[], maxOne_nil⟩
-      simp
-    · refine ⟨_, _, ⟨ ⟨ ?_, equiv_refl⟩ , ?_ ⟩  ⟩ <;> simp
-      use ⌜a b⌝
-      simp [contribSet, maxOne]
-  · unfold eval
-    constructor
-    · simp [eval, resultSet, contribSet]
-    · simp_all [eval]
-      use (ini 2).switch b
-      simp only [Dist.switch, ini, Bool.not_true, Bool.if_true_right, Bool.or_false, ↓reduceIte,
-        true_and]
-      constructor
-      · use ⟨[⌜a b^b⌝], by simp [maxOne]⟩
-        simp_all [equiv, roleOfIn, contribSet, invert, Call.pair]
-      · use ini 2
-        simp only [ini, and_true]
-        use ⟨[⌜a b⌝], by simp [maxOne]⟩
-        simp_all [equiv, roleOfIn, contribSet, Call.pair, ini]
-
 end Error
