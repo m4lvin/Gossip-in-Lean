@@ -118,8 +118,26 @@ lemma OSequence.fixLen_all_spec (σ : { σ : @OSequence n // σ.length = k }) :
     refine ⟨⟨σ,⁻o⟩, by simp at hk; simp_all, IH, ?_⟩
     simp [Call.all_spec]
 
+/-! ## Auxiliary lemmas for `invert` decidability -/
+
+/-- Membership in `invert c A` reduces to membership of the "flipped" value in `A`.
+Since the element-wise inversion is an involution, `v ∈ invert c A` iff the
+inversion of `v` at agent `c` belongs to `A`. -/
+lemma mem_invert_iff {c : @Agent n} {A : Set Value} {v : Value} :
+    v ∈ invert c A ↔ (if v.1 = c then (v.1, !v.2) else v) ∈ A := by
+  rcases v with ⟨j, b⟩
+  simp only [invert, Set.mem_image]
+  constructor
+  · rintro ⟨⟨j', b'⟩, hm, heq⟩
+    split_ifs at heq ⊢ <;> simp_all
+  · intro hm
+    split_ifs at hm with h
+    · exact ⟨⟨j, !b⟩, by subst h; simpa⟩
+    · exact ⟨⟨j, b⟩, by simpa [h]⟩
+
 /-! ## Deciding the Semantics -/
 
+set_option maxHeartbeats 400000 in
 mutual
 
 instance instDecResultSetMem {n} {S : @Dist n} {σ : OSequence} {a : Agent} {x : Value} :
@@ -187,17 +205,146 @@ instance instDecResultSetMem {n} {S : @Dist n} {σ : OSequence} {a : Agent} {x :
             all_goals try apply decEq
             all_goals apply @instDecContribSetOneEq n σ.length S T ⟨⟨σ,o⟩, rfl⟩ τ
       · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ a x
-    -- fstE, based on copy pasta
-    case fstE =>
-      sorry
-    -- sndE, based on copy pasta
-    case sndE =>
-      sorry
+    -- fstE
+    case fstE b e d =>
+      unfold resultSet roleOfIn
+      by_cases a = b <;> by_cases a = d <;>
+        simp_all only [Classical.not_imp, Set.mem_diff, Set.mem_setOf_eq, Set.mem_union,
+          Set.union_self, exists_and_left, not_forall, ↓reduceIte]
+      -- a = b ∧ a = d (Caller, union collapses)
+      · refine @instDecidableAnd _ _ (@instDecidableAnd _ _ ?_ ?_) ?_
+        · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ b x
+        · exact @instDecidableNot _ (@instDecEval n S ⟨σ,⁻o⟩ (Form.K b ((x.1, !x.2)@x.1)))
+        · refine Decidable.exists_of_list_mem Dist.all_spec (fun T => ?_)
+          refine Decidable.exists_of_list_mem (@OSequence.fixLen_all_spec n σ.length) (fun τ => ?_)
+          refine @instDecidableAnd _ _ instDecEquiv ?_
+          · apply Decidable.exists_of_list_mem Call.all_spec
+            rintro (⟨x,y⟩|⟨x,z,y⟩|⟨x,y,z⟩) <;> by_cases b = x <;> by_cases b = y
+              <;> simp_all [Call.pair] <;> try exact instDecidableFalse
+            all_goals
+              refine @instDecidableAnd _ _ ?_ (@instDecidableAnd _ _ ?_ ?_)
+              <;> try refine @instDecidableAnd _ _ ?_ ?_
+            all_goals try exact instDecMaxOne
+            all_goals try exact @instDecidableNot _ instDecEval
+            all_goals apply @instDecContribSetTwoEq n σ.length S T ⟨⟨σ,⁻o⟩, rfl⟩ τ
+      -- a = b ∧ a ≠ d (Caller)
+      · refine @instDecidableAnd _ _ (@instDecidableAnd _ _ (@instDecidableOr _ _ ?_ ?_) ?_) ?_
+        · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ b x
+        · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ d x
+        · exact @instDecidableNot _ (@instDecEval n S ⟨σ,⁻o⟩ (Form.K b ((x.1, !x.2)@x.1)))
+        · refine Decidable.exists_of_list_mem Dist.all_spec (fun T => ?_)
+          refine Decidable.exists_of_list_mem (@OSequence.fixLen_all_spec n σ.length) (fun τ => ?_)
+          refine @instDecidableAnd _ _ instDecEquiv ?_
+          · apply Decidable.exists_of_list_mem Call.all_spec
+            rintro (⟨x,y⟩|⟨x,z,y⟩|⟨x,y,z⟩) <;> by_cases b = x <;> by_cases b = y
+              <;> simp_all [Call.pair] <;> try exact instDecidableFalse
+            all_goals
+              refine @instDecidableAnd _ _ ?_ (@instDecidableAnd _ _ ?_ ?_)
+              <;> try refine @instDecidableAnd _ _ ?_ ?_
+            all_goals try exact instDecMaxOne
+            all_goals try exact @instDecidableNot _ instDecEval
+            all_goals try apply decEq
+            all_goals apply @instDecContribSetTwoEq n σ.length S T ⟨⟨σ,⁻o⟩, rfl⟩ τ
+      -- a ≠ b ∧ a = d (Callee, uses invert for caller's contribution)
+      · refine @instDecidableAnd _ _ (@instDecidableAnd _ _ (@instDecidableOr _ _ ?_ ?_) ?_) ?_
+        · exact @instDecInvertMem n S ⟨σ,⁻o⟩ b e x
+        · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ d x
+        · exact @instDecidableNot _ (@instDecEval n S ⟨σ,⁻o⟩ (Form.K d ((x.1, !x.2)@x.1)))
+        · refine Decidable.exists_of_list_mem Dist.all_spec (fun T => ?_)
+          refine Decidable.exists_of_list_mem (@OSequence.fixLen_all_spec n σ.length) (fun τ => ?_)
+          refine @instDecidableAnd _ _ instDecEquiv ?_
+          · apply Decidable.exists_of_list_mem Call.all_spec
+            rintro (⟨x,y⟩|⟨x,z,y⟩|⟨x,y,z⟩) <;> by_cases b = x <;> by_cases b = y
+              <;> simp_all [Call.pair] <;> try exact instDecidableFalse
+            all_goals
+              refine @instDecidableAnd _ _ ?_ (@instDecidableAnd _ _ ?_ ?_)
+            all_goals try refine @instDecidableAnd _ _ ?_ ?_
+            all_goals try refine @instDecidableAnd _ _ ?_ ?_
+            all_goals try exact instDecMaxOne
+            all_goals try exact @instDecidableNot _ instDecEval
+            all_goals try apply decEq
+            all_goals apply @instDecContribSetOneEq n σ.length S T ⟨⟨σ,⁻o⟩, rfl⟩ τ
+      -- a ≠ b ∧ a ≠ d (Other)
+      · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ a x
+    -- sndE
+    case sndE b d e =>
+      unfold resultSet roleOfIn
+      by_cases a = b <;> by_cases a = d <;>
+        simp_all only [Classical.not_imp, Set.mem_diff, Set.mem_setOf_eq, Set.mem_union,
+          exists_and_left, not_forall, ↓reduceIte]
+      -- a = b ∧ a = d (Caller, union has invert on second part)
+      · refine @instDecidableAnd _ _ (@instDecidableAnd _ _ (@instDecidableOr _ _ ?_ ?_) ?_) ?_
+        · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ b x
+        · exact @instDecInvertMem n S ⟨σ,⁻o⟩ b e x
+        · exact @instDecidableNot _ (@instDecEval n S ⟨σ,⁻o⟩ (Form.K b ((x.1, !x.2)@x.1)))
+        · refine Decidable.exists_of_list_mem Dist.all_spec (fun T => ?_)
+          refine Decidable.exists_of_list_mem (@OSequence.fixLen_all_spec n σ.length) (fun τ => ?_)
+          refine @instDecidableAnd _ _ instDecEquiv ?_
+          · apply Decidable.exists_of_list_mem Call.all_spec
+            rintro (⟨x,y⟩|⟨x,z,y⟩|⟨x,y,z⟩) <;> by_cases b = x <;> by_cases b = y
+              <;> simp_all [Call.pair] <;> try exact instDecidableFalse
+            all_goals
+              refine @instDecidableAnd _ _ ?_ (@instDecidableAnd _ _ ?_ ?_)
+              <;> try refine @instDecidableAnd _ _ ?_ ?_
+            all_goals try exact instDecMaxOne
+            all_goals try exact @instDecidableNot _ instDecEval
+            all_goals apply @instDecContribSetTwoEq n σ.length S T ⟨⟨σ,⁻o⟩, rfl⟩ τ
+      -- a = b ∧ a ≠ d (Caller, invert on callee's contribution)
+      · refine @instDecidableAnd _ _ (@instDecidableAnd _ _ (@instDecidableOr _ _ ?_ ?_) ?_) ?_
+        · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ b x
+        · exact @instDecInvertMem n S ⟨σ,⁻o⟩ d e x
+        · exact @instDecidableNot _ (@instDecEval n S ⟨σ,⁻o⟩ (Form.K b ((x.1, !x.2)@x.1)))
+        · refine Decidable.exists_of_list_mem Dist.all_spec (fun T => ?_)
+          refine Decidable.exists_of_list_mem (@OSequence.fixLen_all_spec n σ.length) (fun τ => ?_)
+          refine @instDecidableAnd _ _ instDecEquiv ?_
+          · apply Decidable.exists_of_list_mem Call.all_spec
+            rintro (⟨x,y⟩|⟨x,z,y⟩|⟨x,y,z⟩) <;> by_cases b = x <;> by_cases b = y
+              <;> simp_all [Call.pair] <;> try exact instDecidableFalse
+            all_goals
+              refine @instDecidableAnd _ _ ?_ (@instDecidableAnd _ _ ?_ ?_)
+              <;> try refine @instDecidableAnd _ _ ?_ ?_
+            all_goals try exact instDecMaxOne
+            all_goals try exact @instDecidableNot _ instDecEval
+            all_goals try apply decEq
+            all_goals apply @instDecContribSetTwoEq n σ.length S T ⟨⟨σ,⁻o⟩, rfl⟩ τ
+      -- a ≠ b ∧ a = d (Callee, no invert)
+      · refine @instDecidableAnd _ _ (@instDecidableAnd _ _ (@instDecidableOr _ _ ?_ ?_) ?_) ?_
+        · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ b x
+        · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ d x
+        · exact @instDecidableNot _ (@instDecEval n S ⟨σ,⁻o⟩ (Form.K d ((x.1, !x.2)@x.1)))
+        · refine Decidable.exists_of_list_mem Dist.all_spec (fun T => ?_)
+          refine Decidable.exists_of_list_mem (@OSequence.fixLen_all_spec n σ.length) (fun τ => ?_)
+          refine @instDecidableAnd _ _ instDecEquiv ?_
+          · apply Decidable.exists_of_list_mem Call.all_spec
+            rintro (⟨x,y⟩|⟨x,z,y⟩|⟨x,y,z⟩) <;> by_cases b = x <;> by_cases b = y
+              <;> simp_all [Call.pair] <;> try exact instDecidableFalse
+            all_goals
+              refine @instDecidableAnd _ _ ?_ (@instDecidableAnd _ _ ?_ ?_)
+            all_goals try refine @instDecidableAnd _ _ ?_ ?_
+            all_goals try refine @instDecidableAnd _ _ ?_ ?_
+            all_goals try exact instDecMaxOne
+            all_goals try exact @instDecidableNot _ instDecEval
+            all_goals try apply decEq
+            all_goals apply @instDecContribSetOneEq n σ.length S T ⟨⟨σ,⁻o⟩, rfl⟩ τ
+      -- a ≠ b ∧ a ≠ d (Other)
+      · exact @instDecResultSetMem n S ⟨σ,⁻o⟩ a x
 termination_by
   (σ.length, 0) -- should be below contribSet
 decreasing_by
-  all_goals
-    apply Prod.Lex.left; grind [OSequence.length] -- Sequence becomes shorter in all cases.
+  all_goals -- Sequence becomes shorter in all cases.
+    apply Prod.Lex.left
+    simp_all only [OSequence.length_def, OSequence.ofLen_length, List.length_cons]
+    omega
+
+/-- Decidability of membership in `invert c (S⌈σ⌉a)`. -/
+instance instDecInvertMem {n} {S : @Dist n} {σ : OSequence} {a c : Agent} {x : Value} :
+    Decidable (x ∈ invert c (S⌈σ⌉a)) := by
+  rw [mem_invert_iff]
+  exact instDecResultSetMem
+termination_by
+  (σ.length, 1)
+decreasing_by
+  all_goals apply Prod.Lex.right; simp
 
 instance instDecResultSetEq {n k} {S T : @Dist n}
     {σ τ : {σ : @OSequence n // σ.length = k}} {a b}
@@ -209,7 +356,55 @@ instance instDecResultSetEq {n k} {S T : @Dist n}
   have := @instDecResultSetMem n T τ b x
   exact instDecidableIff
 termination_by
-  (σ.1.length, 1)
+  (σ.1.length, 2)
+decreasing_by
+  · apply Prod.Lex.right; simp
+  · simp only [OSequence.ofLen_length]; apply Prod.Lex.right; simp
+
+/-- Decidability of `invert c (S⌈σ⌉a) = T⌈τ⌉b`. -/
+instance instDecInvertResultSetEq {n k} {S T : @Dist n}
+    {σ τ : {σ : @OSequence n // σ.length = k}} {c : Agent} {a b}
+    : Decidable (invert c (S⌈σ⌉a) = T⌈τ⌉b) := by
+  rw [Set.ext_iff]
+  apply Decidable.forall_of_list_mem (@Value.all_spec _)
+  intro x
+  have := @instDecInvertMem n S σ a c x
+  have := @instDecResultSetMem n T τ b x
+  exact instDecidableIff
+termination_by
+  (σ.1.length, 2)
+decreasing_by
+  · apply Prod.Lex.right; simp
+  · simp only [OSequence.ofLen_length]; apply Prod.Lex.right; simp
+
+/-- Decidability of `S⌈σ⌉a = invert c (T⌈τ⌉b)`. -/
+instance instDecResultSetInvertEq {n k} {S T : @Dist n}
+    {σ τ : {σ : @OSequence n // σ.length = k}} {c : Agent} {a b}
+    : Decidable (S⌈σ⌉a = invert c (T⌈τ⌉b)) := by
+  rw [Set.ext_iff]
+  apply Decidable.forall_of_list_mem (@Value.all_spec _)
+  intro x
+  have := @instDecResultSetMem n S σ a x
+  have := @instDecInvertMem n T τ b c x
+  exact instDecidableIff
+termination_by
+  (σ.1.length, 2)
+decreasing_by
+  · apply Prod.Lex.right; simp
+  · simp only [OSequence.ofLen_length]; apply Prod.Lex.right; simp
+
+/-- Decidability of `invert c (S⌈σ⌉a) = invert d (T⌈τ⌉b)`. -/
+instance instDecInvertInvertEq {n k} {S T : @Dist n}
+    {σ τ : {σ : @OSequence n // σ.length = k}} {c d : Agent} {a b}
+    : Decidable (invert c (S⌈σ⌉a) = invert d (T⌈τ⌉b)) := by
+  rw [Set.ext_iff]
+  apply Decidable.forall_of_list_mem (@Value.all_spec _)
+  intro x
+  have := @instDecInvertMem n S σ a c x
+  have := @instDecInvertMem n T τ b d x
+  exact instDecidableIff
+termination_by
+  (σ.1.length, 2)
 decreasing_by
   · apply Prod.Lex.right; simp
   · simp only [OSequence.ofLen_length]; apply Prod.Lex.right; simp
@@ -220,16 +415,16 @@ instance instDecContribSetOneEq {n k} {S T : @Dist n}
   unfold contribSet
   cases C <;> cases D <;> simp
   · exact @instDecResultSetEq n k S T σ τ _ _
-  · sorry -- invert
+  · exact instDecResultSetInvertEq
   · exact instDecResultSetEq
-  · sorry -- invert
-  · sorry -- invert
-  · sorry -- invert
+  · exact instDecInvertResultSetEq
+  · exact instDecInvertInvertEq
+  · exact instDecInvertResultSetEq
   · exact instDecResultSetEq
-  · sorry -- invert
+  · exact instDecResultSetInvertEq
   · exact instDecResultSetEq
 termination_by
-  (σ.1.length, 2) -- ??
+  (σ.1.length, 3)
 decreasing_by
   all_goals
     apply Prod.Lex.right; simp
@@ -237,9 +432,19 @@ decreasing_by
 instance instDecContribSetTwoEq {n k} {S T : @Dist n}
     {σ τ : {σ : @OSequence n // σ.length = k}} {C D}
     : Decidable ((contribSet S σ.1 C).2 = (contribSet T τ.1 D).2) := by
-  sorry
+  unfold contribSet
+  cases C <;> cases D <;> simp
+  · exact @instDecResultSetEq n k S T σ τ _ _
+  · exact instDecResultSetEq
+  · exact instDecResultSetInvertEq
+  · exact instDecResultSetEq
+  · exact instDecResultSetEq
+  · exact instDecResultSetInvertEq
+  · exact instDecInvertResultSetEq
+  · exact instDecInvertResultSetEq
+  · exact instDecInvertInvertEq
 termination_by
-  (σ.1.length, 0)
+  (σ.1.length, 3)
 
 instance instDecEquiv
     {n k}
@@ -315,15 +520,11 @@ instance instDecEval {n} {S : @Dist n} {σ φ} : Decidable (eval S σ φ) := by
 termination_by
   (σ.length, φ.length)
 decreasing_by -- Sequence length stays the same, but formula becomes shorter.
-  · apply Prod.Lex.right; simp; linarith
-  · apply Prod.Lex.right; simp
-  · apply Prod.Lex.right; simp -- Here we need `resultSet  <  Has i i`.
-  · apply Prod.Lex.right; simp
-  · apply Prod.Lex.right; simp -- needs `somestuff < K i φ` here?
-  /-
-  · apply Prod.Lex.right; simp
-  · apply Prod.Lex.right; simp -- Here we need `equiv  <  K i φ`.
-  -/
+  · apply Prod.Lex.right; simp_wf; omega
+  · apply Prod.Lex.right; simp_wf
+  · apply Prod.Lex.right; simp_wf -- Here we need `resultSet  <  Has i i`.
+  · apply Prod.Lex.right; simp_wf
+  · apply Prod.Lex.right; simp_wf -- needs `somestuff < K i φ` here?
   · rw [τ.2] -- Here `σ` and `τ` must have the same length.
     apply Prod.Lex.right
     simp_wf
