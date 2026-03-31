@@ -6,3 +6,4 @@ import Gossip.Error.Basic
 import Gossip.Error.SemProp
 import Gossip.Error.DecHelp
 import Gossip.Error.Decide
+import Gossip.Error.Examples

@@ -3,20 +3,26 @@ import Gossip.Error.SemProp
 
 open Error Form Call Role
 
-example :
-  let S : @Dist 3 := fun _ => true
-  let σ : @OSequence 3 := ⟨[], by simp⟩
-  S⌈σ⌉ ⊧ .Top := by
-    -- decide -- mmwah?!
-    sorry
+/-- Just write `1` for an `Agent` that is not `0`. -/
+instance : OfNat { b : @Agent (k+2) // b ≠ 0 } 1 := ⟨1, by simp⟩
 
+/-- Just write `2` for a second `Agent` that is not `0`. -/
+instance : OfNat { b : @Agent (k+3) // b ≠ 0 } 2 := ⟨⟨2, by simp⟩, by simp⟩
+
+-- After the sequence  01,0^12 (in reverse below!) agent 0
+-- has the true value of 2 and the false value of 1.
+/--
+info: true
+-/
+#guard_msgs in
 #eval
   let S : @Dist 3 := fun _ => true
-  let σ : @OSequence 3 := ⟨[ ⌜ 0 1^1 ⌝ ], by simp [maxOne]⟩
-  S⌈σ⌉ ⊧ (⟨1,true⟩ @ 0)
+  let σ : @OSequence 3 := ⟨[ ⌜ 0^1 2 ⌝, ⌜ 0 1 ⌝ ], by simp [maxOne,errFree]⟩
+  S⌈σ⌉ ⊧ ((⟨0,true⟩ @ 2) ⋀ (⟨1,false⟩ @ 2))
 
-def goalForm (a b : @Agent n) : @Form n :=
-      (¬'(b @ a)) ⋀ (K a (b @ b))
+def claimForm (a b : @Agent n) : @Form n := (K a (b @ b)) ⟹ (b @ a)
+
+def counterExampleForm (a b : @Agent n) : @Form n := (¬'(b @ a)) ⋀ (K a (b @ b))
 
 def validAt {n : Nat} (k : Nat) (φ : @Form n) : Prop :=
   ∀ S, ∀ σ : { σ : @OSequence n // σ.length = k } , S⌈σ.1⌉ ⊧ φ
@@ -27,23 +33,37 @@ instance instDecValidAt : Decidable (@validAt n k φ) := by
   refine Decidable.forall_of_list_mem OSequence.fixLen_all_spec (fun σ => ?_)
   exact instDecEval
 
--- #eval (@Call.all 3).length
--- #eval (3 * 3) + (3* 3 * 3) + (3* 3 * 3)
+/- There are 42 different calls among 3 agents. -/
+example : (@Call.all 3).length = 3 * 2 + 3 * 2 * 3 + 3 * 2 * 3 := by decide
 
--- #eval
---   (@OSequence.fixLen_all 3 1).length
+-- There are 468 many call sequences of length 2 among 3 agents:
+/--
+info: 468
+-/
+#guard_msgs in
+#eval (@OSequence.fixLen_all 3 2).length
 
--- #eval
---   @validAt 3 2 (¬' goalForm 0 1)
+/--
+info: true
+-/
+#guard_msgs in
+#eval @validAt 3 1 $ claimForm (0 : Agent) (1 : Agent)
 
 /-! ## Examples -/
 
 /-- Initial distribution with all values set to true. -/
 def ini (n : Nat) : @Dist n := fun _ => true
 
+-- Correct belief need not imply knowledge: given `ini 2`, after an initial call
+-- `ab` agent `a` correclty believes `b`, but a does not know the secret of `b`, because `a`
+-- also considers it possible that the call was `a b^b` instead.
+/--
+info: true
+-/
+#guard_msgs in
 #eval
   let a : @Agent 2 := 0
-  let b : @Agent 2 := 1
+  let b : { b : @Agent 2 // b ≠ a } := ⟨1, by simp [a]⟩
   eval (ini 2) ⟨[ ⌜a b⌝ ], by simp [maxOne]⟩ $
       (    b @ a)  -- a believes b
     ⋀ (¬'(‾b @ a)) -- (and does not believe not-b)
@@ -51,41 +71,3 @@ def ini (n : Nat) : @Dist n := fun _ => true
     ⋀ (¬'(Kv a b)) -- but a does not *know* the value of b.
 
 -- FIXME: make it easier to define a state / give a sequence without writing `simp [maxOne]`.
-
-/-- Correct belief need not imply knowledge: given `ini 2`, after an initial call
-`ab` agent `a` correclty believes `b`, but a does not know the secret of `b`, because `a`
-also considers it possible that the call was `a b^b` instead. -/
-lemma example_correct_belief_does_not_imply_knowledege (a b : Agent) (h : a ≠ b) :
-    eval (ini 2) ⟨[ ⌜a b⌝ ], by simp [maxOne]⟩ $
-      (    b @ a)  -- a believes b
-    ⋀ (¬'(‾b @ a)) -- (and does not believe not-b)
-    ⋀ (   b @ b)   -- correctly,
-    ⋀ (¬'(Kv a b)) -- but a does not *know* the value of b.
-    := by
-  unfold ini
-  unfold eval
-  constructor
-  · simp [eval, resultSet, contribSet]
-    constructor
-    · use ini 2
-      unfold ini
-      simp only [and_true]
-      use ⟨[], maxOne_nil⟩
-      simp
-    · refine ⟨_, _, ⟨ ⟨ ?_, equiv_refl⟩ , ?_ ⟩  ⟩ <;> simp
-      use ⌜a b⌝
-      simp [contribSet, maxOne]
-  · unfold eval
-    constructor
-    · simp [eval, resultSet, contribSet]
-    · simp_all [eval]
-      use (ini 2).switch b
-      simp only [Dist.switch, ini, Bool.not_true, Bool.if_true_right, Bool.or_false, ↓reduceIte,
-        true_and]
-      constructor
-      · use ⟨[⌜a b^b⌝], by simp [maxOne]⟩
-        simp_all [equiv, roleOfIn, contribSet, invert, Call.pair]
-      · use ini 2
-        simp only [ini, and_true]
-        use ⟨[⌜a b⌝], by simp [maxOne]⟩
-        simp_all [equiv, roleOfIn, contribSet, Call.pair, ini]
