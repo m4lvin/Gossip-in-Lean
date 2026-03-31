@@ -34,9 +34,12 @@ def Dist.switch : @Agent n -> @Dist n -> @Dist n
   | i, S => fun a => if a = i then not (S a) else S a
 
 inductive Call : Type
-  | normal : (caller : @Agent n) → (callee : @Agent n) → Call -- a b
-  | fstE : (caller : @Agent n) → (err : @Agent n) → (callee : @Agent n) → Call -- a^c b
-  | sndE : (caller : @Agent n) → (callee : @Agent n) → (err : @Agent n) → Call -- a b^c
+  /-- ⌜a b⌝ -/
+  | normal : (caller : @Agent n) → (callee : { b : @Agent n // b ≠ caller }) → Call
+  /-- ⌜a^c b⌝ -/
+  | fstE : (caller : @Agent n) → (err : @Agent n) → (callee : { b : @Agent n // b ≠ caller }) → Call
+  /-- ⌜a b^c⌝ -/
+  | sndE : (caller : @Agent n) → (callee : { b : @Agent n // b ≠ caller }) → (err : @Agent n) → Call
 
 -- Nicer notation for `Call`
 notation "⌜" a:arg  b:arg "⌝" => Call.normal a b
@@ -45,9 +48,9 @@ notation "⌜"  a:arg b:arg "^" c:arg "⌝" => Call.sndE a b c
 
 /-- The pair of agents in the call, ignoring whether an error is made. -/
 def Call.pair : @Call n → (@Agent n × @Agent n)
-  | ⌜ a   b   ⌝ => (a , b)
-  | ⌜ a^_ b   ⌝ => (a , b)
-  | ⌜ a   b^_ ⌝ => (a , b)
+  | ⌜ a   b   ⌝ => (a , b.1)
+  | ⌜ a^_ b   ⌝ => (a , b.1)
+  | ⌜ a   b^_ ⌝ => (a , b.1)
 
 /-- (Def 2) A sequence is a list of calls.
 For easy pattern matching this is in *reverse* order: the newest call is the first element. -/

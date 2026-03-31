@@ -40,7 +40,7 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
       cases C <;> cases D <;> simp [Call.pair, roleOfIn_eq_Caller_iff] at *
       -- TODO: after Lean / batteries update speed up below with merged `simp_all?` suggestions
       all_goals -- 9 subcases
-        rcases same_pair with ⟨_,_⟩
+        rcases same_pair with ⟨same_l,same_r⟩
         subst_eqs
         simp only [OSequence.length_def, List.length_cons, Nat.add_right_cancel_iff] at same_len
         clear Caller_eq
@@ -54,11 +54,13 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
           rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
         · simp_all [← IH, ← equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, mO, same_contrib, role2, equ2, ndk⟩
+          rw [Call.pair, same_r] at mO
           refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], mO, same_p, ndk⟩
           · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
           · rw [← role2]; try simp [roleOfIn]
         · simp_all [equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, mO, same_contrib, role2, equ2, ndk⟩
+          rw [Call.pair, ← same_r] at mO
           refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], mO, same_p, ndk⟩
           · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
           · rw [← role2]; try simp [roleOfIn]
@@ -69,7 +71,7 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
       let C_copy := C
       cases C <;> cases D <;> simp [Call.pair, roleOfIn_eq_Callee_iff] at *
       all_goals -- again 9 subcases, same proof
-        rcases same_pair with ⟨_,_⟩
+        rcases same_pair with ⟨same_l,same_r⟩
         rcases r with ⟨_,_⟩
         subst_eqs
         simp only [OSequence.length_def, List.length_cons, Nat.add_right_cancel_iff] at same_len
@@ -83,14 +85,16 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
           rcases dk_in with ⟨⟨someone_had_dk_before, dk_not_refused⟩, not_self_corrected⟩
         · simp_all [← IH, ← equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, mO, same_contrib, role2, equ2, ndk⟩
+          rw [Call.pair, same_r] at mO
           refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], mO, same_p, ndk⟩
           · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
-          · rw [← role2]; try simp [roleOfIn]
+          · rw [← role2]; try simp [roleOfIn, same_r]
         · simp_all [equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, mO, same_contrib, role2, equ2, ndk⟩
+          rw [Call.pair, ← same_r] at mO
           refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], mO, same_p, ndk⟩
           · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
-          · rw [← role2]; try simp [roleOfIn]
+          · rw [← role2]; try simp [roleOfIn, same_r]
     case Other => -- third out of three outer cases, easy
       unfold resultSet
       rw [r]
@@ -432,7 +436,7 @@ lemma caller_rejects_opposite_of_afterwards_known_value {a b : @Agent n} {k} C
     intro h1 h2 T τ same_len equ D role_D same_set same_p mO
     apply know_after T ⟨D :: τ.1, mO⟩
     · simp_all [equiv, contribSet]
-      cases D <;> cases same_p <;> simp_all [roleOfIn]
+      cases D <;> cases c <;> cases same_p <;> simp_all [roleOfIn]
     · rw [OSequence.length, ← same_len]; rfl
 
 -- Maybe rename this later ;-)

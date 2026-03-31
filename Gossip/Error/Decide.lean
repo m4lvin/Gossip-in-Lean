@@ -44,16 +44,15 @@ lemma Dist.all_spec (S : @Dist n) : S ∈ Dist.all := by
 /-! ## List of all calls -/
 
 def Call.castSucc {n} : @Call n → @Call (n+1)
-  | .normal a b => .normal a.castSucc b.castSucc
-  | .fstE a c b => .fstE a.castSucc c.castSucc b.castSucc
-  | .sndE a b c => .sndE a.castSucc b.castSucc c.castSucc
+  | .normal a b => .normal a.castSucc ⟨b.1.castSucc, by cases b; simpa [Fin.castSucc_inj]⟩
+  | .fstE a c b => .fstE a.castSucc c.castSucc ⟨b.1.castSucc, by cases b; simpa [Fin.castSucc_inj]⟩
+  | .sndE a b c => .sndE a.castSucc ⟨b.1.castSucc, by cases b; simpa [Fin.castSucc_inj]⟩ c.castSucc
 
 def Call.allAmong {n : Nat} : @Agent n → @Agent n → List (@Call n)
-  | a, b => .normal a b
-            :: (List.range n).attach.map (fun c => .fstE a ⟨c.1, by grind⟩ b)
-            ++ (List.range n).attach.map (fun c => .sndE a b ⟨c.1, by grind⟩)
-
--- small worry: is it okay to let an agent call itself?
+  | a, b => if h : b = a then []
+            else .normal a ⟨b, h⟩
+            :: (List.range n).attach.map (fun c => .fstE a ⟨c.1, by grind⟩ ⟨b,h⟩)
+            ++ (List.range n).attach.map (fun c => .sndE a ⟨b,h⟩ ⟨c.1, by grind⟩)
 
 def Call.all {n : Nat} : List (@Call n) :=
   (List.range n).attach.flatMap (fun a =>
