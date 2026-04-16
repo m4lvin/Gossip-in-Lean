@@ -4,6 +4,7 @@ import Gossip.Necessary
 import Gossip.Evaluation
 import Gossip.Error.Basic
 import Gossip.Error.SemProp
+import Gossip.Error.Prop12
 import Gossip.Error.DecHelp
 import Gossip.Error.Decide
 import Gossip.Error.Examples
