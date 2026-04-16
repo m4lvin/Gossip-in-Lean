@@ -453,98 +453,56 @@ lemma callee_contribSet_eq_of_resultSet_eq
     : (contribSet S σ C).2 = (contribSet T σ C).2 := by
   cases C <;> simp_all [contribSet]
 
-/-- If the caller `a` has neither value of `b` after call `C`,
+/-- If `a` is in `C` and has neither value of `b` after call `C`,
 then before the call they also cannot have had the real value. -/
-lemma caller_not_have_before {n : ℕ} {b : @Agent n} {S : @Dist n} {k : Bool}
+lemma involved_not_have_before_of_not_have_after {n : ℕ} {b : @Agent n} {S : @Dist n} {k : Bool}
     (is_k : S b = k) (C : Call) (σ : List Call) (a : Agent) (o : maxOne (C :: σ))
-    (r_def : roleOfIn a C = Role.Caller)
+    (r_in : roleOfIn a C ≠ Role.Other)
     (a_has_no_k : (b, k) ∉ S⌈⟨C :: σ, o⟩⌉a)
     (a_has_no_not_k : (b, !k) ∉ S⌈⟨C :: σ, o⟩⌉a)
     : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉a := by
   intro suppose
   absurd a_has_no_k; clear a_has_no_k
   unfold resultSet
-  let copyC := C
-  cases C
-  case normal callee => -- works :)
-    simp_all [Call.pair]
-    subst_eqs
-    constructor
-    · intro hyp
-      have := true_of_knowldege hyp
-      simp at this
-    · refine ⟨S, ⟨σ,o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
-      simp [o, copyC]
-  case fstE callee => -- copy-pasta but broken??
-    rcases callee with ⟨callee, callee_neq_callee⟩
-    simp_all [Call.pair]
-    subst_eqs
-    simp [roleOfIn]
-    constructor
-    · intro hyp
-      have := true_of_knowldege hyp
-      simp at this
-    · refine ⟨S, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
-      simp [o, copyC]
-  case sndE callee => -- copy-pasta but broken??
-    rcases callee with ⟨callee, callee_neq_callee⟩
-    simp_all [Call.pair]
-    subst_eqs
-    simp [roleOfIn]
-    constructor
-    · intro hyp
-      have := true_of_knowldege hyp
-      simp at this
-    · refine ⟨S, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
-      simp [o, copyC]
+  cases r_def : roleOfIn a C
+  case Other =>
+    exfalso
+    grind
+  all_goals
+    let copyC := C
+    cases C
+    case normal callee => -- works :)
+      simp_all [Call.pair]
+      subst_eqs
+      constructor
+      · intro hyp
+        have := true_of_knowldege hyp
+        simp at this
+      · refine ⟨S, ⟨σ,o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
+        simp [o, copyC]
+    case fstE callee => -- copy-pasta but broken??
+      rcases callee with ⟨callee, callee_neq_callee⟩
+      simp_all [Call.pair]
+      subst_eqs
+      simp [roleOfIn]
+      constructor
+      · intro hyp
+        have := true_of_knowldege hyp
+        simp at this
+      · refine ⟨S, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
+        simp_all [copyC]
+    case sndE callee _ => -- copy-pasta but broken??
+      rcases callee with ⟨callee, callee_neq_callee⟩
+      simp_all [Call.pair]
+      subst_eqs
+      simp [roleOfIn]
+      constructor
+      · intro hyp
+        have := true_of_knowldege hyp
+        simp at this
+      · refine ⟨S, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
+        simp_all [copyC]
 
-/-- If the callee `a` has neither value of `b` after call `C`,
-then before the call they also cannot have had the real value. -/
-lemma callee_not_have_before {n : ℕ} {b : @Agent n} {S : @Dist n} {k : Bool}
-    (is_k : S b = k) (C : Call) (σ : List Call) (a : Agent) (o : maxOne (C :: σ))
-    (r_def : roleOfIn a C = Role.Callee)
-    (a_has_no_k : (b, k) ∉ S⌈⟨C :: σ, o⟩⌉a)
-    (a_has_no_not_k : (b, !k) ∉ S⌈⟨C :: σ, o⟩⌉a)
-    : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉a := by
-  intro suppose
-  absurd a_has_no_k; clear a_has_no_k
-  unfold resultSet
-  let copyC := C
-  cases C
-  case normal callee => -- works :)
-    simp_all [Call.pair]
-    cases r_def
-    subst_eqs
-    constructor
-    · intro hyp
-      have := true_of_knowldege hyp
-      simp at this
-    · refine ⟨S, ⟨σ,o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
-      simp [o, copyC]
-  case fstE callee =>
-    rcases callee with ⟨callee, callee_neq_caller⟩
-    simp_all [Call.pair]
-    subst_eqs
-    simp [roleOfIn, suppose, callee_neq_caller]
-    constructor
-    · intro hyp
-      have := true_of_knowldege hyp
-      simp at this
-    · refine ⟨S, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
-      grind
-  case sndE callee =>
-    rcases callee with ⟨callee, callee_neq_callee⟩
-    simp_all [Call.pair]
-    subst_eqs
-    simp [roleOfIn]
-    constructor
-    · intro hyp
-      have := true_of_knowldege hyp
-      simp at this
-    · refine ⟨S, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
-      grind
-
-set_option maxHeartbeats 2000000 in
 /-- New Lemma 2 -/
 lemma two {n : Nat} (a b : @Agent n) {S : @Dist n} {σ : @OSequence n}
     {k : Bool} (is_k : S b = k)
@@ -567,15 +525,15 @@ lemma two {n : Nat} (a b : @Agent n) {S : @Dist n} {σ : @OSequence n}
       · -- (**) longer case -- later?!
         sorry
       · -- (*) (done first in paper proof)
-        have how_do_we_get_this : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉a :=
-          caller_not_have_before is_k C σ _ o r_def a_has_no_k disj
-        have and_that_too : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉(C.pair.2) := by
+        have a_has_no_before : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉a :=
+          involved_not_have_before_of_not_have_after is_k C σ _ o (by grind) a_has_no_k disj
+        have but_how_do_we_get_that_too : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉(C.pair.2) := by
           -- Probably we still need a different Lemma here?!
-          apply @callee_not_have_before n b S k is_k C σ C.pair.2 o (by simp)
+          apply @involved_not_have_before_of_not_have_after n b S k is_k C σ C.pair.2 o (by simp)
           · sorry
           · sorry
-        have by_IH_a := IH a (⁻o) how_do_we_get_this
-        have by_IH_callee := IH (C.pair.2) (⁻o) and_that_too
+        have by_IH_a := IH a (⁻o) a_has_no_before
+        have by_IH_callee := IH (C.pair.2) (⁻o) but_how_do_we_get_that_too
         refine ⟨by_IH_a, ?_⟩
         apply @callee_contribSet_eq_of_resultSet_eq n C.pair.2 C S _ _ _ _
         · unfold roleOfIn Call.pair; grind
