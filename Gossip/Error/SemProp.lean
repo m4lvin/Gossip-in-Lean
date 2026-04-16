@@ -14,7 +14,7 @@ open Form
 /-! ## Properties of the Semantics -/
 
 set_option maxHeartbeats 2000000 in
-/-- Lemma 7 -/
+/-- Lemma 7, also could have been named resultSet_eq_of_equiv -/
 lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ τ : OSequence} :
     (S, σ) ~_a (T, τ)  →  S⌈σ⌉a = T⌈τ⌉a := by
   rcases σ with ⟨σ,o⟩
@@ -44,7 +44,7 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
         subst_eqs
         simp only [OSequence.length_def, List.length_cons, Nat.add_right_cancel_iff] at same_len
         clear Caller_eq
-        simp only [roleOfIn_a, resultSet, Subtype.forall, OSequence.length_def,
+        simp only [roleOfIn_eq_caller, resultSet, Subtype.forall, OSequence.length_def,
           roleOfIn_sndE_eq_Caller_iff, roleOfIn_fstE_eq_Caller_iff, roleOfIn_sndE_eq_Caller_iff]
         ext ⟨d,k⟩
         constructor
@@ -88,13 +88,13 @@ lemma indistinguishable_then_same_values {n} {a : @Agent n} {S T: @Dist n} {σ �
           rw [Call.pair, same_r] at mO
           refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], mO, same_p, ndk⟩
           · convert equiv_trans (equiv_symm.mp prev_equ) equ2; simp_all
-          · rw [← role2]; try simp [roleOfIn, same_r]
+          · rw [← role2]; simpa [roleOfIn, same_r]
         · simp_all [equiv_then_know_same prev_equ]
           rcases not_self_corrected with ⟨S2, σ2, len2, C2, same_p, mO, same_contrib, role2, equ2, ndk⟩
           rw [Call.pair, ← same_r] at mO
           refine ⟨S2, σ2, ⟨by omega, ?_⟩, C2, ?_, by grind [contribSet], mO, same_p, ndk⟩
           · apply equiv_trans prev_equ; rw! [same_len]; convert equ2
-          · rw [← role2]; try simp [roleOfIn, same_r]
+          · rw [← role2]; simpa [roleOfIn, same_r]
     case Other => -- third out of three outer cases, easy
       unfold resultSet
       rw [r]
@@ -439,6 +439,157 @@ lemma caller_rejects_opposite_of_afterwards_known_value {a b : @Agent n} {k} C
       cases D <;> cases c <;> cases same_p <;> simp_all [roleOfIn]
     · rw [OSequence.length, ← same_len]; rfl
 
+lemma caller_contribSet_eq_of_resultSet_eq
+    {n} {a : @Agent n} {C : @Call n} {S T : @Dist n} {σ : @OSequence n}
+    (r_def : roleOfIn a C = .Caller)
+    (h : S⌈σ⌉a = T⌈σ⌉a)
+    : (contribSet S σ C).1 = (contribSet T σ C).1 := by
+  cases C <;> simp_all [contribSet]
+
+lemma callee_contribSet_eq_of_resultSet_eq
+    {n} {a : @Agent n} {C : @Call n} {S T : @Dist n} {σ : @OSequence n}
+    (r_def : roleOfIn a C = .Callee)
+    (h : S⌈σ⌉a = T⌈σ⌉a)
+    : (contribSet S σ C).2 = (contribSet T σ C).2 := by
+  cases C <;> simp_all [contribSet]
+
+/-- If the caller `a` has neither value of `b` after call `C`,
+then before the call they also cannot have had the real value. -/
+lemma caller_not_have_before {n : ℕ} {b : @Agent n} {S : @Dist n} {k : Bool}
+    (is_k : S b = k) (C : Call) (σ : List Call) (a : Agent) (o : maxOne (C :: σ))
+    (r_def : roleOfIn a C = Role.Caller)
+    (a_has_no_k : (b, k) ∉ S⌈⟨C :: σ, o⟩⌉a)
+    (a_has_no_not_k : (b, !k) ∉ S⌈⟨C :: σ, o⟩⌉a)
+    : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉a := by
+  intro suppose
+  absurd a_has_no_k; clear a_has_no_k
+  unfold resultSet
+  let copyC := C
+  cases C
+  case normal callee => -- works :)
+    simp_all [Call.pair]
+    subst_eqs
+    constructor
+    · intro hyp
+      have := true_of_knowldege hyp
+      simp at this
+    · refine ⟨S, ⟨σ,o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
+      simp [o, copyC]
+  case fstE callee => -- copy-pasta but broken??
+    rcases callee with ⟨callee, callee_neq_callee⟩
+    simp_all [Call.pair]
+    subst_eqs
+    simp [roleOfIn]
+    constructor
+    · intro hyp
+      have := true_of_knowldege hyp
+      simp at this
+    · refine ⟨S, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
+      simp [o, copyC]
+  case sndE callee => -- copy-pasta but broken??
+    rcases callee with ⟨callee, callee_neq_callee⟩
+    simp_all [Call.pair]
+    subst_eqs
+    simp [roleOfIn]
+    constructor
+    · intro hyp
+      have := true_of_knowldege hyp
+      simp at this
+    · refine ⟨S, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
+      simp [o, copyC]
+
+/-- If the callee `a` has neither value of `b` after call `C`,
+then before the call they also cannot have had the real value. -/
+lemma callee_not_have_before {n : ℕ} {b : @Agent n} {S : @Dist n} {k : Bool}
+    (is_k : S b = k) (C : Call) (σ : List Call) (a : Agent) (o : maxOne (C :: σ))
+    (r_def : roleOfIn a C = Role.Callee)
+    (a_has_no_k : (b, k) ∉ S⌈⟨C :: σ, o⟩⌉a)
+    (a_has_no_not_k : (b, !k) ∉ S⌈⟨C :: σ, o⟩⌉a)
+    : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉a := by
+  intro suppose
+  absurd a_has_no_k; clear a_has_no_k
+  unfold resultSet
+  let copyC := C
+  cases C
+  case normal callee => -- works :)
+    simp_all [Call.pair]
+    cases r_def
+    subst_eqs
+    constructor
+    · intro hyp
+      have := true_of_knowldege hyp
+      simp at this
+    · refine ⟨S, ⟨σ,o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
+      simp [o, copyC]
+  case fstE callee =>
+    rcases callee with ⟨callee, callee_neq_caller⟩
+    simp_all [Call.pair]
+    subst_eqs
+    simp [roleOfIn, suppose, callee_neq_caller]
+    constructor
+    · intro hyp
+      have := true_of_knowldege hyp
+      simp at this
+    · refine ⟨S, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
+      grind
+  case sndE callee =>
+    rcases callee with ⟨callee, callee_neq_callee⟩
+    simp_all [Call.pair]
+    subst_eqs
+    simp [roleOfIn]
+    constructor
+    · intro hyp
+      have := true_of_knowldege hyp
+      simp at this
+    · refine ⟨S, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
+      grind
+
+set_option maxHeartbeats 2000000 in
+/-- New Lemma 2 -/
+lemma two {n : Nat} (a b : @Agent n) {S : @Dist n} {σ : @OSequence n}
+    {k : Bool} (is_k : S b = k)
+    (a_has_no_k : (b, k) ∉ S⌈σ⌉a)
+    : equiv a (S, ⟨σ, rfl⟩) (S.switch b, ⟨σ, rfl⟩) := by
+  rcases σ with ⟨σ, o⟩
+  induction σ generalizing a -- need IH for other agents
+  case nil =>
+    cases b
+    simp_all [Dist.switch]
+    grind
+  case cons C σ IH =>
+    have b_neq_a : b ≠ a := by
+      have := @stubbornness n S b k _ ⟨_,o⟩ rfl; grind [eval]
+    cases r_def : roleOfIn a C
+    case Caller =>
+      simp [equiv, r_def]
+      -- cases a has_no_k into disjunctions?
+      by_cases disj : (b, !k) ∈ S⌈⟨_,o⟩⌉a
+      · -- (**) longer case -- later?!
+        sorry
+      · -- (*) (done first in paper proof)
+        have how_do_we_get_this : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉a :=
+          caller_not_have_before is_k C σ _ o r_def a_has_no_k disj
+        have and_that_too : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉(C.pair.2) := by
+          -- Probably we still need a different Lemma here?!
+          apply @callee_not_have_before n b S k is_k C σ C.pair.2 o (by simp)
+          · sorry
+          · sorry
+        have by_IH_a := IH a (⁻o) how_do_we_get_this
+        have by_IH_callee := IH (C.pair.2) (⁻o) and_that_too
+        refine ⟨by_IH_a, ?_⟩
+        apply @callee_contribSet_eq_of_resultSet_eq n C.pair.2 C S _ _ _ _
+        · unfold roleOfIn Call.pair; grind
+        apply indistinguishable_then_same_values --  Lemma 7
+        exact equi_of_equiv by_IH_callee
+    case Callee =>
+      --analogous?
+      sorry
+    case Other => -- easy :-)
+      simp [equiv, r_def]
+      unfold resultSet at a_has_no_k
+      simp [r_def] at a_has_no_k
+      apply @IH a (⁻o) a_has_no_k
+
 -- Maybe rename this later ;-)
 lemma caller_the_hard_case {a b : @Agent n} {k} S C σ
     (o : maxOne (C :: σ))
@@ -446,6 +597,8 @@ lemma caller_the_hard_case {a b : @Agent n} {k} S C σ
     (ra : roleOfIn a C = .Caller)
     (not_know_before : ¬ S⌈⟨σ,⁻o⟩⌉ ⊧ K a ((b, k)@b))
     : S⌈⟨C :: σ, o⟩⌉ ⊧ (b, k)@a := by
+  have is_k := true_of_knowldege knows
+  simp only [OSequence.length_def, List.length_cons, stubbornness] at is_k
   cases C
   case normal _a c =>
     simp at ra; subst ra
@@ -467,18 +620,12 @@ lemma caller_the_hard_case {a b : @Agent n} {k} S C σ
         apply knows S ⟨_, o⟩ (by simp) equiv_refl
     · simp_all [eval,resultSet]
       -- "We therefore only have the following *four* remaining cases ..."
-      -- "First ..." That is `Dist.switch`.
-      -- "Second ..."
-      rcases not_know_before with ⟨T, ⟨τ, same_len, equ⟩, Tb_not_k⟩
+      have claim : (b, k) ∉ S⌈⟨⌜a c⌝ :: σ, o⟩⌉a := by unfold resultSet; grind
+      have byLemma := @two n a b S ⟨⌜a c⌝ :: σ, o⟩ _ is_k claim -- using new Lemma 2 here
       absurd knows
       simp
-      by_cases (b, !k) ∉ S⌈⟨σ,⁻o⟩⌉a <;> by_cases (b, !k) ∉ S⌈⟨σ,⁻o⟩⌉c
-      · refine ⟨T, ⟨⟨⌜a c⌝ :: τ.1, by simp_all [maxOne]⟩, ?_⟩ , by simp [*]⟩
-        simp [equiv, OSequence.length, contribSet, ← same_len, equ]
-        sorry
-      · sorry
-      · sorry
-      · sorry
+      exact ⟨S.switch b, ⟨⟨⌜a c⌝ :: σ, o⟩, by simp, byLemma⟩ , by simpa [Dist.switch]⟩
+
   case fstE =>
     -- unsure how analogous this will be.
     sorry
@@ -523,7 +670,7 @@ lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
         · exact caller_keeps_known_value C ra S σ o h IH.2.1
         · exact caller_rejects_opposite_of_known_value C ra S σ o h
       · -- If S, σ |= ¬Kabb, this is the harder case, and the case of most interest in the proof.
-        clear IH -- here we do not use it?
+        -- clear IH -- here we do not use it? BUT WE SHOULD!
         -- "We show the three conjuncts separately, where the (hardest) second comes last.""
         refine ⟨?one, ?two, ?three⟩
         case one => exact true_of_knowldege knows

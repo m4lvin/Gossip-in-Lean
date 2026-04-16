@@ -60,6 +60,19 @@ abbrev Sequence : Type := List (@Call n)
 def invert : @Agent n -> Set (@Value n) -> Set (@Value n)
   | i, vs => vs.image (fun (j,b) => if j = i then (j, not b) else (j,b))
 
+/-- Membership in `invert c A` reduces to membership of the "flipped" value in `A`. -/
+lemma mem_invert_iff {c : @Agent n} {A : Set Value} {v : Value} :
+    v ∈ invert c A ↔ (if v.1 = c then (v.1, !v.2) else v) ∈ A := by
+  rcases v with ⟨j, b⟩
+  simp only [invert, Set.mem_image]
+  constructor
+  · rintro ⟨⟨j', b'⟩, hm, heq⟩
+    split_ifs at heq ⊢ <;> simp_all
+  · intro hm
+    split_ifs at hm with h
+    · exact ⟨⟨j, !b⟩, by subst h; simpa⟩
+    · exact ⟨⟨j, b⟩, by simpa [h]⟩
+
 /-! ## Syntax -/
 
 /-- (Def 3) Logical language -/
@@ -103,7 +116,19 @@ def roleOfIn (i : @Agent n) : (c : @Call n) → Role
   | ⌜ a   b^_ ⌝ => if i = a then Caller else if i = b then Callee else Other
 
 @[simp]
-lemma roleOfIn_a : roleOfIn a ⌜ a b ⌝ = Caller := by simp [roleOfIn]
+lemma roleOfIn_eq_caller {a : @Agent n} {b} : roleOfIn a ⌜ a b ⌝ = Caller := by simp [roleOfIn]
+@[simp]
+lemma roleOfIn_eq_callee {a : @Agent n} {b} : roleOfIn b.1 ⌜ a b ⌝ = Callee := by grind [roleOfIn]
+
+@[simp]
+lemma roleOfIn_fstE_eq_caller  {a c : @Agent n} {b} : roleOfIn a ⌜ a^c b ⌝ = Caller := by simp [roleOfIn]
+@[simp]
+lemma roleOfIn_fstE_eq_callee {a c : @Agent n} {b} : roleOfIn b.1 ⌜ a^c b ⌝ = Callee := by grind [roleOfIn]
+
+@[simp]
+lemma roleOfIn_sndE_eq_caller {a c : @Agent n} {b} : roleOfIn a ⌜ a b^c ⌝ = Caller := by simp [roleOfIn]
+@[simp]
+lemma roleOfIn_sndE_eq_callee {a c : @Agent n} {b} : roleOfIn b.1 ⌜ a b^c ⌝ = Callee := by grind [roleOfIn]
 
 @[simp]
 lemma roleOfIn_eq_Caller_iff : roleOfIn a ⌜ x y ⌝ = Caller ↔ a = x := by simp [roleOfIn]; grind
@@ -126,11 +151,15 @@ lemma roleOfIn_sndE_eq_Callee_iff : roleOfIn a ⌜ x y^z ⌝ = Callee ↔ a ≠ 
 @[simp]
 lemma roleOfIn_sndE_eq_Other_iff : roleOfIn a ⌜ x y^z ⌝ = Other ↔ a ≠ x ∧ a ≠ y := by simp [roleOfIn]; grind
 
-/-- Who is the other agent than `i` in this call? If `i` is not in the call, return caller. -/
-def other (i : @Agent n) : (c : @Call n) → @Agent n
-  | ⌜ a   b   ⌝ => if i = a then b else a
-  | ⌜ a^_ b   ⌝ => if i = a then b else a
-  | ⌜ a   b^_ ⌝ => if i = a then b else a
+@[simp]
+lemma roleOfIn_pair_fst :
+    roleOfIn C.pair.1 C = Role.Caller := by
+  cases C <;> simp [roleOfIn] <;> grind [Call.pair]
+
+@[simp]
+lemma roleOfIn_pair_snd :
+    roleOfIn C.pair.2 C = Role.Callee := by
+  cases C <;> simp [roleOfIn] <;> grind [Call.pair]
 
 /-! ## Sequences with at most one transmission error -/
 

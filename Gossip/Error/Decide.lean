@@ -117,23 +117,6 @@ lemma OSequence.fixLen_all_spec (σ : { σ : @OSequence n // σ.length = k }) :
     refine ⟨⟨σ,⁻o⟩, by simp at hk; simp_all, IH, ?_⟩
     simp [Call.all_spec]
 
-/-! ## Auxiliary lemmas for `invert` decidability -/
-
-/-- Membership in `invert c A` reduces to membership of the "flipped" value in `A`.
-Since the element-wise inversion is an involution, `v ∈ invert c A` iff the
-inversion of `v` at agent `c` belongs to `A`. -/
-lemma mem_invert_iff {c : @Agent n} {A : Set Value} {v : Value} :
-    v ∈ invert c A ↔ (if v.1 = c then (v.1, !v.2) else v) ∈ A := by
-  rcases v with ⟨j, b⟩
-  simp only [invert, Set.mem_image]
-  constructor
-  · rintro ⟨⟨j', b'⟩, hm, heq⟩
-    split_ifs at heq ⊢ <;> simp_all
-  · intro hm
-    split_ifs at hm with h
-    · exact ⟨⟨j, !b⟩, by subst h; simpa⟩
-    · exact ⟨⟨j, b⟩, by simpa [h]⟩
-
 /-! ## Deciding the Semantics -/
 
 set_option maxHeartbeats 400000 in
