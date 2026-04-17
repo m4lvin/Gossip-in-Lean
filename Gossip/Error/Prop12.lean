@@ -58,20 +58,20 @@ lemma involved_not_have_before_of_not_have_after {n : ℕ} {b : @Agent n} {S : @
 lemma two {n : Nat} (a b : @Agent n) {S : @Dist n} {σ : @OSequence n}
     {k : Bool} (is_k : S b = k)
     (a_has_no_k : (b, k) ∉ S⌈σ⌉a)
-    -- TODO: wrong statement, see Examples.lean
-    : equiv a (S, ⟨σ, rfl⟩) (S.switch b, ⟨σ, rfl⟩) := by
+    : ∃ σ', equiv a (S, ⟨σ, rfl⟩) (S.switch b, σ') := by
   rcases σ with ⟨σ, o⟩
   induction σ generalizing a -- need IH for other agents
   case nil =>
     cases b
     simp_all [Dist.switch]
+    use .nil, (by simp)
+    simp
     grind
   case cons C σ IH =>
     have b_neq_a : b ≠ a := by
       have := @stubbornness n S b k _ ⟨_,o⟩ rfl; grind [eval]
     cases r_def : roleOfIn a C
     case Caller =>
-      simp [equiv, r_def]
       -- cases a has_no_k into disjunctions?
       by_cases disj : (b, !k) ∈ S⌈⟨_,o⟩⌉a
       rotate_left -- to match the order in the paper
@@ -87,11 +87,17 @@ lemma two {n : Nat} (a b : @Agent n) {S : @Dist n} {σ : @OSequence n}
           · sorry
         have by_IH_a := IH a (⁻o) a_has_no_before
         have by_IH_callee := IH (C.pair.2) (⁻o) but_how_do_we_get_that_too
+        -- PROBLEM: Now the two IH calls may give us different σ' sequences.
+        -- Which one do we want to use?
+        -- simp [equiv, r_def]
+        /-
         refine ⟨by_IH_a, ?_⟩
         apply @callee_contribSet_eq_of_resultSet_eq n C.pair.2 C S _ _ _ _
         · unfold roleOfIn Call.pair; grind
         apply indistinguishable_then_same_values -- Lemma 7
         exact equi_of_equiv by_IH_callee
+        -/
+        sorry
       · -- (**) "there are more subcases to consider"
         -- What really are the three(?) subcases here?
         -- by_cases (b, !k) ∈ S⌈⟨C::σ,o⟩⌉C.pair.2  -- Not sure if this is ther right case split.
@@ -100,11 +106,24 @@ lemma two {n : Nat} (a b : @Agent n) {S : @Dist n} {σ : @OSequence n}
       -- This is probably analogous.
       -- Only work on this when the Caller case is fully done and sorry-free.
       sorry
-    case Other => -- easy :-)
-      simp [equiv, r_def]
+    case Other => -- less trivial now with ∃σ' change.
       unfold resultSet at a_has_no_k
       simp [r_def] at a_has_no_k
-      apply @IH a (⁻o) a_has_no_k
+      specialize @IH a (⁻o) a_has_no_k
+      rcases IH with ⟨⟨σ', σ'_len⟩, IH⟩
+      -- Note: we cannot ensure that C :: σ' has at most one error.
+      -- So we remove the error from `C`, same trick as in `not_in_call_then_invariant_kv`.
+      let CnoErr : Call := match C with
+        | ⌜d e⌝ => ⌜d e⌝
+        | ⌜d^c e⌝ => ⌜d e⌝
+        | ⌜d e^c⌝ => ⌜d e⌝
+      have maxOne' : maxOne (CnoErr :: ↑σ') := by cases C <;> simp_all [CnoErr, maxOne]
+      use ⟨⟨CnoErr :: σ', maxOne'⟩, by grind [OSequence.length]⟩
+      unfold equiv
+      rw [r_def]
+      simp
+      refine ⟨IH, ?_⟩
+      grind [roleOfIn]
 
 -- Maybe rename this later ;-)
 lemma caller_the_hard_case {a b : @Agent n} {k} S C σ
@@ -138,9 +157,12 @@ lemma caller_the_hard_case {a b : @Agent n} {k} S C σ
       -- "We therefore only have the following *four* remaining cases ..."
       have claim : (b, k) ∉ S⌈⟨⌜a c⌝ :: σ, o⟩⌉a := by unfold resultSet; grind
       have byLemma := @two n a b S ⟨⌜a c⌝ :: σ, o⟩ _ is_k claim -- using new Lemma 2 here
+      -- Get σ' from Lemma here:
+      rcases byLemma with ⟨⟨σ', σ'_len⟩, byLemma⟩
       absurd knows
       simp
-      exact ⟨S.switch b, ⟨⟨⌜a c⌝ :: σ, o⟩, by simp, byLemma⟩ , by simpa [Dist.switch]⟩
+      refine ⟨S.switch b, ⟨⟨σ', by simp⟩, ?_, byLemma⟩ , by simpa [Dist.switch]⟩
+      simp; grind [OSequence.length]
 
   case fstE =>
     -- unsure how analogous this will be.

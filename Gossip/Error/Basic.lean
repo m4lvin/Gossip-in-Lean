@@ -212,6 +212,9 @@ instance : Coe (@OSequence n) (@Sequence n) := ⟨Subtype.val⟩
 def OSequence.length (σ : @OSequence n) : Nat := σ.1.length
 
 @[simp]
+def OSequence.nil : @OSequence n := ⟨[], by simp⟩
+
+@[simp]
 lemma OSequence.length_nil : OSequence.length (⟨[], h⟩ : @OSequence n) = 0 := by
   simp [OSequence.length]
 
