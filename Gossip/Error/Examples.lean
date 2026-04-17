@@ -71,3 +71,15 @@ info: true
     ⋀ (¬'(Kv a b)) -- but a does not *know* the value of b.
 
 -- FIXME: make it easier to define a state / give a sequence without writing `simp [maxOne]`.
+
+/-- Example that is relevant for new Lemma 2. -/
+example:
+    let a := 0
+    let b := ⟨1, by simp⟩
+    let S := ini 3
+    let σ := ⟨[⌜a b^b⌝], by simp [maxOne]⟩
+    -- Then we have:
+    ⟨b,false⟩ ∈ S⌈σ⌉a
+    ∧ ⟨b,true⟩ ∉ S⌈σ⌉a
+    ∧ ¬ equiv a (S, ⟨σ, rfl⟩) (S.switch b.1, ⟨σ, rfl⟩)
+  := by native_decide

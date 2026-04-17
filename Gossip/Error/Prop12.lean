@@ -58,6 +58,7 @@ lemma involved_not_have_before_of_not_have_after {n : ℕ} {b : @Agent n} {S : @
 lemma two {n : Nat} (a b : @Agent n) {S : @Dist n} {σ : @OSequence n}
     {k : Bool} (is_k : S b = k)
     (a_has_no_k : (b, k) ∉ S⌈σ⌉a)
+    -- TODO: wrong statement, see Examples.lean
     : equiv a (S, ⟨σ, rfl⟩) (S.switch b, ⟨σ, rfl⟩) := by
   rcases σ with ⟨σ, o⟩
   induction σ generalizing a -- need IH for other agents
