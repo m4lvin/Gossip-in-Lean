@@ -54,76 +54,152 @@ lemma involved_not_have_before_of_not_have_after {n : ℕ} {b : @Agent n} {S : @
       · refine ⟨S, ⟨σ,⁻o⟩, ⟨rfl, equiv_refl⟩, ⟨copyC, ?_⟩⟩
         simp_all [copyC]
 
-/-- New Lemma 2 -/
-lemma two {n : Nat} (a b : @Agent n) {S : @Dist n} {σ : @OSequence n}
-    {k : Bool} (is_k : S b = k)
-    (a_has_no_k : (b, k) ∉ S⌈σ⌉a)
-    : ∃ σ', equiv a (S, ⟨σ, rfl⟩) (S.switch b, σ') := by
-  rcases σ with ⟨σ, o⟩
-  induction σ generalizing a -- need IH for other agents
-  case nil =>
-    cases b
-    simp_all [Dist.switch]
-    use .nil, (by simp)
-    simp
-    grind
-  case cons C σ IH =>
-    have b_neq_a : b ≠ a := by
-      have := @stubbornness n S b k _ ⟨_,o⟩ rfl; grind [eval]
-    cases r_def : roleOfIn a C
+@[grind]
+def cor {n} : @Agent n → @Sequence n → @Sequence n
+  | _, [] => []
+  | b, .normal a c :: σ => .normal a c :: cor b σ
+  | b, .fstE a e c :: σ =>
+      if e = b  then .normal a c :: cor b σ
+                else .fstE a e c :: cor b σ
+  | b, .sndE a c e :: σ =>
+      if e = b  then .normal a c :: cor b σ
+                else .fstE a e c :: cor b σ
+termination_by
+  _ σ => σ
+decreasing_by
+  all_goals simp_all
+
+@[simp, grind .]
+lemma cor_errFree {n} {σ : @Sequence n} {b : @Agent n} (h : errFree σ) : errFree (cor b σ) := by
+  induction σ
+  case nil => simp_all [errFree, cor]
+  case cons κ σ IH => cases κ <;> simp_all [cor, errFree]
+
+@[simp, grind .]
+lemma cor_maxOne {n} {σ : @Sequence n} {b : @Agent n} (h : maxOne σ) : maxOne (cor b σ) := by
+  cases σ
+  case nil => simp_all [cor]
+  case cons κ σ =>
+    cases κ
+    case normal =>
+      simp [cor]
+      simp [maxOne]
+      simp [maxOne] at h
+      exact @cor_maxOne _ _ b h
+    case fstE a e c =>
+      simp [cor]
+      by_cases eb : e = b
+      · simp [eb]
+        simp [maxOne]
+        exact @cor_maxOne _ _ b (⁻h)
+      · simp_all [maxOne]
+    case sndE a c e =>
+      simp [cor]
+      by_cases eb : e = b
+      · simp [eb]
+        simp [maxOne]
+        exact @cor_maxOne _ _ b (⁻h)
+      · simp_all [maxOne]
+
+@[simp]
+lemma cor_same_length : (cor b σ).length = σ.length := by
+  induction σ
+  · simp_all [cor]
+  case cons κ σ IH =>
+    cases κ <;> simp_all [cor] <;> split <;> simp_all
+
+def Call.cor : @Agent n → @Call n → @Call n
+  | _, .normal a c => .normal a c
+  | b, .fstE a e c => if e = b  then .normal a c else .fstE a e c
+  | b, .sndE a c e => if e = b  then .normal a c else .fstE a e c
+
+lemma cor_cons {σ : @Sequence n} : cor b (κ :: σ) = κ.cor b :: cor b σ := by
+  induction κ <;> simp [cor, Call.cor] <;> split <;> simp
+
+lemma Call.cor_cons_maxOne : maxOne (κ :: σ) → maxOne (Call.cor b κ :: σ) := by
+  intro h
+  cases κ
+  case normal c d =>
+    simp_all [maxOne, cor]
+  case fstE c e d =>
+    rcases d with ⟨d, c_neq_d⟩
+    simp_all [cor]
+    split <;> simp_all [maxOne]; exact Sequence.maxOne_of_errFree h
+  case sndE c d e =>
+    rcases d with ⟨d, c_neq_d⟩
+    simp_all [cor]
+    split <;> simp_all [maxOne]; exact Sequence.maxOne_of_errFree h
+
+@[simp, grind .]
+lemma Call.cor_same_role {a b : @Agent n} {κ : @Call n} :
+    roleOfIn a (κ.cor b) = roleOfIn a κ:= by
+  cases κ
+  case normal c d =>
+    rcases d with ⟨d, c_neq_d⟩
+    by_cases a = c <;> by_cases a = d <;> subst_eqs <;> simp_all [cor]
+  case fstE c e d =>
+    rcases d with ⟨d, c_neq_d⟩
+    by_cases a = c <;> by_cases a = d <;> subst_eqs <;> simp_all [cor] <;> split <;> simp [roleOfIn]
+  case sndE c d e =>
+    rcases d with ⟨d, c_neq_d⟩
+    by_cases a = c <;> by_cases a = d <;> subst_eqs <;> simp_all [cor] <;> split <;> simp [roleOfIn]
+
+@[grind .]
+lemma not_in_call_equiv_of_equiv
+    {S T : @Dist n}
+    (a : @Agent n)
+    (not_in_call : roleOfIn a κ = Role.Other)
+    (equ_before : equiv a (S, ⟨⟨σ, ⁻o⟩, rfl⟩) (T, ⟨⟨τ, ⁻p⟩, h1⟩))
+    : equiv a (S, ⟨⟨κ :: σ, o⟩, rfl⟩) (T, ⟨⟨κ :: τ, p⟩, h2⟩) := by
+  unfold equiv; simp_all
+
+lemma not_in_call_then_consider_cor
+    (not_in_call : roleOfIn a κ = Role.Other)
+    : equiv a (S, ⟨⟨κ :: σ, o⟩, h1⟩) (S, ⟨⟨Call.cor b κ :: σ, o'⟩, h2⟩) := by
+  unfold equiv; simp_all
+
+/-- New Lemma that should help.
+If the actual values of b is k, but agent a does not yet hae it, then agent a considers
+the b-flipped distribution possible, with the b-correction of the actual sequence. -/
+lemma consider_corrected {n : Nat} (a b : @Agent n) {S : @Dist n} {σ : @OSequence n}
+    {k : Bool} (real_b_is_k : S b = k)
+    (a_has_no_b_k : (b, k) ∉ S⌈σ⌉a)
+    : equiv a (S, ⟨σ, rfl⟩) (S.switch b, ⟨⟨cor b σ, cor_maxOne σ.2⟩, cor_same_length⟩) := by
+  rcases σ_def : σ with ⟨σ,o⟩
+  cases σ
+  · simp_all [cor]
+    grind [Dist.switch]
+  case cons κ σ =>
+    cases role_def : roleOfIn a κ
+    case Other =>
+      have : (b, k) ∉ S⌈⟨σ,⁻o⟩⌉a := by grind [not_in_call_then_invariant_resultSet]
+      have IH := consider_corrected a b real_b_is_k this
+      -- easy, sort of.
+      rw! [cor_cons]
+      have := @not_in_call_equiv_of_equiv n (κ.cor b) σ ?_ (cor b σ) ?_
+        cor_same_length ?_ S (Dist.switch b S) a (by simp_all) IH
+      · exact equiv_trans (not_in_call_then_consider_cor role_def) this
+      · exact Call.cor_cons_maxOne o
+      · have := @cor_maxOne _ _ b o
+        rw [cor_cons] at this
+        exact this
+      · simp
     case Caller =>
-      -- cases a has_no_k into disjunctions?
-      by_cases disj : (b, !k) ∈ S⌈⟨_,o⟩⌉a
-      rotate_left -- to match the order in the paper
-      · -- (*) "then already"
-        have a_has_no_before : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉a :=
-          involved_not_have_before_of_not_have_after is_k C σ _ o (by grind) a_has_no_k disj
-        have but_how_do_we_get_that_too : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉(C.pair.2) := by
-          -- From here on we are unsure.
-          -- Maybe we still need a different Lemma than "involved_not_have_before_of_not_have_after" here.
-          apply @involved_not_have_before_of_not_have_after n b S k is_k C σ C.pair.2 o (by simp)
-          -- Maybe add extra lemmas for this.
-          · sorry
-          · sorry
-        have by_IH_a := IH a (⁻o) a_has_no_before
-        have by_IH_callee := IH (C.pair.2) (⁻o) but_how_do_we_get_that_too
-        -- PROBLEM: Now the two IH calls may give us different σ' sequences.
-        -- Which one do we want to use?
-        -- simp [equiv, r_def]
-        /-
-        refine ⟨by_IH_a, ?_⟩
-        apply @callee_contribSet_eq_of_resultSet_eq n C.pair.2 C S _ _ _ _
-        · unfold roleOfIn Call.pair; grind
-        apply indistinguishable_then_same_values -- Lemma 7
-        exact equi_of_equiv by_IH_callee
-        -/
+      -- TODO NEXT
+      by_cases (b, !k) ∈ S⌈⟨κ::σ,o⟩⌉a
+      case neg a_has_no_op_k =>
+        -- claim "then already ..."
+        -- have IHa :=
+        -- have IH_callee :=
         sorry
-      · -- (**) "there are more subcases to consider"
-        -- What really are the three(?) subcases here?
-        -- by_cases (b, !k) ∈ S⌈⟨C::σ,o⟩⌉C.pair.2  -- Not sure if this is ther right case split.
+      case pos a_has_k =>
+        -- "there are more subcases to consider"
         sorry
-    case Callee =>
-      -- This is probably analogous.
-      -- Only work on this when the Caller case is fully done and sorry-free.
+
+    case Callee => -- hopefully analogous, don't do it yet.
       sorry
-    case Other => -- less trivial now with ∃σ' change.
-      unfold resultSet at a_has_no_k
-      simp [r_def] at a_has_no_k
-      specialize @IH a (⁻o) a_has_no_k
-      rcases IH with ⟨⟨σ', σ'_len⟩, IH⟩
-      -- Note: we cannot ensure that C :: σ' has at most one error.
-      -- So we remove the error from `C`, same trick as in `not_in_call_then_invariant_kv`.
-      let CnoErr : Call := match C with
-        | ⌜d e⌝ => ⌜d e⌝
-        | ⌜d^c e⌝ => ⌜d e⌝
-        | ⌜d e^c⌝ => ⌜d e⌝
-      have maxOne' : maxOne (CnoErr :: ↑σ') := by cases C <;> simp_all [CnoErr, maxOne]
-      use ⟨⟨CnoErr :: σ', maxOne'⟩, by grind [OSequence.length]⟩
-      unfold equiv
-      rw [r_def]
-      simp
-      refine ⟨IH, ?_⟩
-      grind [roleOfIn]
+termination_by
+  σ.1.length
 
 -- Maybe rename this later ;-)
 lemma caller_the_hard_case {a b : @Agent n} {k} S C σ
@@ -156,13 +232,11 @@ lemma caller_the_hard_case {a b : @Agent n} {k} S C σ
     · simp_all [eval,resultSet]
       -- "We therefore only have the following *four* remaining cases ..."
       have claim : (b, k) ∉ S⌈⟨⌜a c⌝ :: σ, o⟩⌉a := by unfold resultSet; grind
-      have byLemma := @two n a b S ⟨⌜a c⌝ :: σ, o⟩ _ is_k claim -- using new Lemma 2 here
-      -- Get σ' from Lemma here:
-      rcases byLemma with ⟨⟨σ', σ'_len⟩, byLemma⟩
+      have byLemma := @consider_corrected n a b S ⟨⌜a c⌝ :: σ, o⟩ k is_k claim
       absurd knows
       simp
-      refine ⟨S.switch b, ⟨⟨σ', by simp⟩, ?_, byLemma⟩ , by simpa [Dist.switch]⟩
-      simp; grind [OSequence.length]
+      refine ⟨S.switch b, ⟨⟨_, cor_maxOne o⟩, ?_, byLemma⟩ , by simpa [Dist.switch]⟩
+      simp
 
   case fstE =>
     -- unsure how analogous this will be.
