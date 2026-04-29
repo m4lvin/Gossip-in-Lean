@@ -1,3 +1,7 @@
+/-! # Helpers for Decidability / Model Checking
+
+This file does not import anything and thus is not specifically about Gossip.
+-/
 
 theorem exists_in_all_iff_exists {α} {all : List α} (all_spec : ∀ x, x ∈ all) {P : α → Prop} :
     (∃ x ∈ all, P x) ↔ (∃ x, P x) := by

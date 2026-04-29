@@ -3,6 +3,10 @@ import Gossip.Error.SemProp
 
 open Error Form Call Role
 
+/-! # Synchronous One-Error Gossip with Correction -/
+
+/-! ## Examples -/
+
 /-- Just write `1` for an `Agent` that is not `0`. -/
 instance : OfNat { b : @Agent (k+2) // b ≠ 0 } 1 := ⟨1, by simp⟩
 

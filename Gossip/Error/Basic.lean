@@ -482,3 +482,12 @@ lemma equiv_then_know_same {a m S} {σ : @OSequence n} {h1 : σ.length = m} {T �
     rw [equiv_symm] at equ
     have := @equiv_trans n a m T τ h2 S ⟨σ,o⟩ h1 η ρ (by grind) equ (by convert equ'; grind)
     convert this
+
+@[grind .]
+lemma not_in_call_equiv_of_equiv
+    {S T : @Dist n}
+    (a : @Agent n)
+    (not_in_call : roleOfIn a κ = Role.Other)
+    (equ_before : equiv a (S, ⟨⟨σ, ⁻o⟩, rfl⟩) (T, ⟨⟨τ, ⁻p⟩, h1⟩))
+    : equiv a (S, ⟨⟨κ :: σ, o⟩, rfl⟩) (T, ⟨⟨κ :: τ, p⟩, h2⟩) := by
+  unfold equiv; simp_all

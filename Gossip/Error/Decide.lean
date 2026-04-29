@@ -8,6 +8,10 @@ import Gossip.Error.Basic
 
 namespace Error
 
+/-! # Synchronous One-Error Gossip with Correction -/
+
+/-! ## Decidability / Model Checking -/
+
 def Value.all : List (@Value n) :=
   (List.range n).attach.flatMap (fun a => [ ⟨⟨a.1, by grind⟩, true⟩
                                           , ⟨⟨a.1, by grind⟩, false⟩ ])
@@ -18,7 +22,7 @@ def Value.all_spec : x ∈ Value.all := by
   simp
   grind
 
-/-! ## List of all distributions -/
+/-! ### List of all distributions -/
 
 def Dist.all : {n : Nat} → List (@Dist n)
   | 0 => [ fun x => by exfalso; cases x; grind ]
@@ -41,7 +45,7 @@ lemma Dist.all_spec (S : @Dist n) : S ∈ Dist.all := by
       ext k
       apply @Fin.lastCases n _ _ _ k <;> simp_all
 
-/-! ## List of all calls -/
+/-! ### List of all calls -/
 
 def Call.castSucc {n} : @Call n → @Call (n+1)
   | .normal a b => .normal a.castSucc ⟨b.1.castSucc, by cases b; simpa [Fin.castSucc_inj]⟩
@@ -67,7 +71,7 @@ lemma Call.all_spec (C : @Call n) : C ∈ Call.all := by
     unfold Call.all
     cases C <;> simp [allAmong] <;> grind
 
-/-! ## List of all OSequences of a given length -/
+/-! ### List of all OSequences of a given length -/
 
 mutual
 
@@ -117,7 +121,7 @@ lemma OSequence.fixLen_all_spec (σ : { σ : @OSequence n // σ.length = k }) :
     refine ⟨⟨σ,⁻o⟩, by simp at hk; simp_all, IH, ?_⟩
     simp [Call.all_spec]
 
-/-! ## Deciding the Semantics -/
+/-! ### Deciding the Semantics -/
 
 set_option maxHeartbeats 400000 in
 mutual

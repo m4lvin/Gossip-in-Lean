@@ -2,19 +2,24 @@
 
 We use Lean 4 to verify results about Gossip protocols.
 
+## Standard Gossip
+
 - The main result proven in `Gossip.Sufficient` is that $2n-4$ calls are sufficient to make agents experts in a fully-connected graph.
 
 - For the result that $2n-4$ calls are also necessary, a proof sketch has been started in `Gossip.Necessary`.
 
 - In `Evaluation.lean` we provide examples to verify the correctness of the Lean definitions.
 
-Authors:
+## Synchronous One-Error Gossip with Correction
+
+In `Gossip/Error` we formalize Gossip with bit secrets and at most one transmission error.
+Moreover, in this setting agents self-correct by rejecting secret values they know to be wrong.
+
+## Authors
 
 - Timo Doherty
 - Andrei Mărculeşteanu
 - Malvin Gattinger
-
-## Code basis
 
 The project was started as part of the following two bachelor theses.
 
