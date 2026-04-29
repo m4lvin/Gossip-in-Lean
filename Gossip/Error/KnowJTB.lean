@@ -205,22 +205,22 @@ lemma callee_real_value_not_before {n : ℕ} {b : @Agent n} {S : @Dist n} {k : B
     (ra : roleOfIn a κ = .Callee)
     (a_has_no_k : (b, k) ∉ S⌈⟨κ :: σ, o⟩⌉a)
     : (b, k) ∉ S⌈⟨σ, ⁻o⟩⌉a := by
-      unfold resultSet at a_has_no_k
-      contrapose! a_has_no_k
-      rcases κ with ( _ | _ | _ ) <;> simp [ * ] at *
-      · refine' ⟨ ⟨ Or.inr _, _ ⟩, _ ⟩
-        · simp_all
-        · intro h; have := true_of_knowldege h; simp_all [ stubbornness ]
-        · refine' ⟨ S, ⟨σ, ⁻o⟩, _, _ ⟩ <;> norm_num
-          grind +suggestions
-      · refine' ⟨ ⟨ Or.inr _, _ ⟩, _ ⟩
-        · aesop
-        · intro h; have := true_of_knowldege h; simp_all [ stubbornness ]
-        · refine' ⟨ S, ⟨ σ, _ ⟩, _, _ ⟩ <;> norm_num [ is_k ] <;> grind +suggestions
-      · refine' ⟨ ⟨ Or.inr _, _ ⟩, S, ⟨ σ, by aesop ⟩, _, _ ⟩ <;> norm_num
-        · aesop
-        · intro h; have := true_of_knowldege h; simp_all [ stubbornness ]
-        · grind +suggestions
+  unfold resultSet at a_has_no_k
+  contrapose! a_has_no_k
+  rcases κ with ( _ | _ | _ ) <;> simp [ * ] at *
+  · refine' ⟨ ⟨ Or.inr _, _ ⟩, _ ⟩
+    · simp_all
+    · intro h; have := true_of_knowldege h; simp_all [ stubbornness ]
+    · refine' ⟨ S, ⟨σ, ⁻o⟩, _, _ ⟩ <;> norm_num
+      grind +suggestions
+  · refine' ⟨ ⟨ Or.inr _, _ ⟩, _ ⟩
+    · aesop
+    · intro h; have := true_of_knowldege h; simp_all [ stubbornness ]
+    · refine' ⟨ S, ⟨ σ, _ ⟩, _, _ ⟩ <;> norm_num [ is_k ] <;> grind +suggestions
+  · refine' ⟨ ⟨ Or.inr _, _ ⟩, S, ⟨ σ, by aesop ⟩, _, _ ⟩ <;> norm_num
+    · aesop
+    · intro h; have := true_of_knowldege h; simp_all [ stubbornness ]
+    · grind +suggestions
 
 /-- Extract caller not having (b,k) from callee not having (b,k) after normal call. -/
 lemma caller_real_value_not_in_normal {n : ℕ} {b : @Agent n} {S : @Dist n} {k : Bool}
