@@ -63,7 +63,7 @@ def cor {n} : @Agent n → @Sequence n → @Sequence n
                 else .fstE a e c :: cor b σ
   | b, .sndE a c e :: σ =>
       if e = b  then .normal a c :: cor b σ
-                else .fstE a e c :: cor b σ
+                else .sndE a c e :: cor b σ
 termination_by
   _ σ => σ
 decreasing_by
@@ -111,7 +111,7 @@ lemma cor_same_length : (cor b σ).length = σ.length := by
 def Call.cor : @Agent n → @Call n → @Call n
   | _, .normal a c => .normal a c
   | b, .fstE a e c => if e = b  then .normal a c else .fstE a e c
-  | b, .sndE a c e => if e = b  then .normal a c else .fstE a e c
+  | b, .sndE a c e => if e = b  then .normal a c else .sndE a c e
 
 lemma cor_cons {σ : @Sequence n} : cor b (κ :: σ) = κ.cor b :: cor b σ := by
   induction κ <;> simp [cor, Call.cor] <;> split <;> simp
