@@ -298,7 +298,7 @@ lemma know_your_own {a : @Agent n} :
     rw [know_self _ _ _ _ _ equ] at h
     exact h
 
-/-- Helper for Prop 12 "iff (call semantics)" -/
+/-- Helper for `knowledge_implies_correct_belief` -/
 lemma not_in_call_then_invariant_resultSet {a : @Agent n} {C : @Call n}
     (h : roleOfIn a C = .Other) S σ o
     : S⌈⟨C :: σ, o⟩⌉a = S⌈⟨σ, ⁻o⟩⌉a := by

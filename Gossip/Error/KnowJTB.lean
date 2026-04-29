@@ -367,7 +367,7 @@ lemma consider_corrected_callee {n : Nat} (a b : @Agent n) {S : @Dist n}
       · have := IH _ ( caller_real_value_not_in_sndE real_b_is_k _ _ _ _ _ a_has_no_b_k )
         exact indistinguishable_then_same_values ( equi_of_equiv this )
 
-/-- Key Lemma that helps to show `knowledge_implies_correct_belief`.
+/-- Key Lemma 12 that helps to show `knowledge_implies_correct_belief`.
 If the actual values of b is k, but agent a does not yet have it, then agent a considers
 possible the b-switched distribution with the b-correction of the actual sequence. -/
 lemma consider_corrected {n : Nat} (a b : @Agent n) {S : @Dist n} {σ : @OSequence n}
@@ -484,7 +484,7 @@ lemma callee_rejects_opposite_of_afterwards_known_value {a b : @Agent n} {k} C
 
 /-! ## Main Result -/
 
-/-- Proposition 12.
+/-- Proposition 13.
 Parts (i) and (ii) are given by different `k` values. -/
 lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
   ⊨ (K a ((b,k) @ b)) ⟹ ( ((b,k) @ b) ⋀ ((b,k) @ a) ⋀ ( ¬' (b, !k) @ a) ) := by
@@ -560,7 +560,7 @@ lemma knowledge_implies_correct_belief {n} {a b : @Agent n} {k} :
           · exact consider_corrected a b is_k knows
           · simp_all [Dist.switch]
 
-/-- Corollary 13. -/
+/-- Corollary 14. -/
 lemma knowledge_is_justified_true_belief {n} {a b : @Agent n} :
     ⊨ K a ((b,k) @ b) ⇔ K a ( ((b,k) @ b) ⋀ ((b,k) @ a) ⋀ ( ¬' (b, !k) @ a) ) := by
   intro S σ
